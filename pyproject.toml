@@ -22,7 +22,7 @@ dependencies = [
     "uvicorn[standard]>=0.32.0",
     "websockets>=13.0",
     # 채팅 UI
-    "chainlit>=2.0.0",
+    "streamlit>=1.41.0",
     # 검색
     "tavily-python>=0.5.0",
     # 논문 수집

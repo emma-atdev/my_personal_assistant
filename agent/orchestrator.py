@@ -15,7 +15,7 @@ from tools.cost_tracker import get_cost_summary
 from tools.memory import delete_memory, get_memory, list_memories, save_memory
 from tools.notes import create_note, list_notes, search_notes
 
-SYSTEM_PROMPT = """
+_SYSTEM_PROMPT_TEMPLATE = """
 LLM 전문 AI 개발자의 개인 비서입니다.
 
 역할:
@@ -30,10 +30,9 @@ LLM 전문 AI 개발자의 개인 비서입니다.
 - file: 로컬 파일 읽기 (MCP 필요)
 - cron: 브리핑 생성, 리포트 작성
 
-이름/페르소나 관리:
-- 대화 시작 시 get_memory로 "assistant_name" 키를 조회해 저장된 이름이 있으면 그 이름으로 행동
-- 사용자가 "너 이름은 OOO야", "이름을 OOO로 바꿔줘" 같은 말을 하면 즉시 save_memory("assistant_name", "OOO")로 장기 기억에 저장하고 그 이름을 사용
-- 저장된 이름이 없으면 기본적으로 "비서"로 행동
+이름/페르소나:
+- 현재 이름: {assistant_name}
+- 사용자가 "너 이름은 OOO야", "이름을 OOO로 바꿔줘" 같은 말을 하면 즉시 save_memory("assistant_name", "OOO")로 저장하고 그 이름을 사용
 
 기억 유형 구분 및 저장 기준:
 - 사용자가 선호도, 목표, 중요한 결정 등 개인 정보를 언급하면 즉시 save_memory로 장기 기억에 저장
@@ -54,6 +53,15 @@ HITL_TOOLS: dict[str, bool] = {
 }
 
 
+def _get_assistant_name() -> str:
+    """DB에서 비서 이름을 조회한다. 없으면 빈 문자열을 반환한다."""
+    from tools.memory import get_memory
+    result = get_memory("assistant_name")
+    if "기억이 없습니다" in result:
+        return ""
+    return result
+
+
 def create_orchestrator(
     thread_id: str = "default",
 ) -> tuple[CompiledStateGraph, RunnableConfig]:  # type: ignore[type-arg]
@@ -65,6 +73,13 @@ def create_orchestrator(
     Returns:
         (agent, config) 튜플
     """
+    name = _get_assistant_name()
+    if name:
+        assistant_name = name
+    else:
+        assistant_name = "아직 이름이 없습니다. 첫 대화에서 사용자에게 이름을 지어달라고 요청하세요."
+
+    system_prompt = _SYSTEM_PROMPT_TEMPLATE.format(assistant_name=assistant_name)
     checkpointer = MemorySaver()
 
     agent: CompiledStateGraph = create_deep_agent(  # type: ignore[type-arg]
@@ -83,7 +98,7 @@ def create_orchestrator(
             get_cost_summary,
         ],
         subagents=[RESEARCH_SUBAGENT, NOTE_SUBAGENT, FILE_SUBAGENT, CRON_SUBAGENT],  # type: ignore[list-item]
-        system_prompt=SYSTEM_PROMPT,
+        system_prompt=system_prompt,
         checkpointer=checkpointer,
         interrupt_on=HITL_TOOLS,  # type: ignore[arg-type]
         name="personal-assistant",

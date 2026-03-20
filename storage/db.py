@@ -76,6 +76,30 @@ def _init_tables_sqlite(conn: sqlite3.Connection) -> None:
     conn.commit()
 
 
+class _PgConnWrapper:
+    """psycopg2 connection을 SQLite처럼 con.execute()로 쓸 수 있게 감싼다."""
+
+    def __init__(self, conn: Any) -> None:
+        import psycopg2.extras
+
+        self._conn = conn
+        self._cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
+
+    def execute(self, sql: str, params: Any = None) -> Any:
+        self._cur.execute(sql, params)
+        return self._cur
+
+    def commit(self) -> None:
+        self._conn.commit()
+
+    def rollback(self) -> None:
+        self._conn.rollback()
+
+    def close(self) -> None:
+        self._cur.close()
+        self._conn.close()
+
+
 @contextmanager
 def get_conn() -> Generator[Any, None, None]:
     """DATABASE_URL 유무에 따라 PostgreSQL 또는 SQLite 연결을 반환한다."""
@@ -83,13 +107,12 @@ def get_conn() -> Generator[Any, None, None]:
 
     if IS_PG:
         import psycopg2
-        import psycopg2.extras
 
-        conn = psycopg2.connect(DATABASE_URL)
-        conn.cursor_factory = psycopg2.extras.RealDictCursor
+        raw_conn = psycopg2.connect(DATABASE_URL)
         if not _INITIALIZED:
-            _init_tables_pg(conn)
+            _init_tables_pg(raw_conn)
             _INITIALIZED = True
+        conn = _PgConnWrapper(raw_conn)
         try:
             yield conn
             conn.commit()
