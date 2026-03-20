@@ -1,0 +1,12 @@
+# 로컬 MCP 서버 허용 디렉토리 설정
+# 이 목록 외의 경로는 절대 접근 불가
+
+allowed_directories:
+  - path: "~/my_personal_assistant"
+    access: "read"          # read | read_write
+
+# 추후 필요에 따라 디렉토리 추가
+# - path: "~/papers"
+#   access: "read"
+# - path: "~/notes"
+#   access: "read_write"

@@ -1,0 +1,23 @@
+"""파일 서브에이전트 — 로컬 MCP 서버를 통한 파일 접근 전담."""
+
+from langchain.chat_models import init_chat_model
+
+from tools.local_file import list_local_files, read_local_file
+
+FILE_SUBAGENT: dict[str, object] = {
+    "name": "file",
+    "description": (
+        "로컬 파일 읽기나 디렉토리 탐색이 필요할 때 사용. "
+        "코드 분석, 문서 요약, 로컬 프로젝트 파일 접근 담당. "
+        "MCP 서버가 실행 중일 때만 동작."
+    ),
+    "system_prompt": (
+        "당신은 파일 분석 전문가입니다. "
+        "허용된 디렉토리 내 파일을 읽고 분석합니다. "
+        "코드 파일은 구조와 핵심 로직을 요약하고, "
+        "문서 파일은 핵심 내용을 추출해 정리하세요. "
+        "허용되지 않은 경로 접근 시 명확히 안내하세요."
+    ),
+    "tools": [read_local_file, list_local_files],
+    "model": init_chat_model("openai:gpt-4o-mini"),
+}

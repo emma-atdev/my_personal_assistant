@@ -1,0 +1,97 @@
+"""메인 Orchestrator 에이전트 설정."""
+
+from deepagents import create_deep_agent
+from langchain_core.runnables import RunnableConfig
+from langgraph.checkpoint.memory import MemorySaver
+from langgraph.graph.state import CompiledStateGraph
+
+from utils.logger import AgentLoggingHandler
+
+from agent.subagents.cron import CRON_SUBAGENT
+from agent.subagents.file import FILE_SUBAGENT
+from agent.subagents.note import NOTE_SUBAGENT
+from agent.subagents.research import RESEARCH_SUBAGENT
+from tools.cost_tracker import get_cost_summary
+from tools.memory import delete_memory, get_memory, list_memories, save_memory
+from tools.notes import create_note, list_notes, search_notes
+
+SYSTEM_PROMPT = """
+LLM 전문 AI 개발자의 개인 비서입니다.
+
+역할:
+- 사용자의 질문에 한국어로 답변
+- 웹 검색, 논문 탐색, 메모 관리, 파일 분석, 비용 조회 수행
+- 복잡한 작업은 적절한 서브에이전트에 위임
+- 대화 맥락과 장기 기억을 활용해 일관성 있게 응답
+
+서브에이전트 활용 기준:
+- research: 웹 검색, AI 뉴스, 논문 탐색
+- note: 메모 저장/조회/수정
+- file: 로컬 파일 읽기 (MCP 필요)
+- cron: 브리핑 생성, 리포트 작성
+
+이름/페르소나 관리:
+- 대화 시작 시 get_memory로 "assistant_name" 키를 조회해 저장된 이름이 있으면 그 이름으로 행동
+- 사용자가 "너 이름은 OOO야", "이름을 OOO로 바꿔줘" 같은 말을 하면 즉시 save_memory("assistant_name", "OOO")로 장기 기억에 저장하고 그 이름을 사용
+- 저장된 이름이 없으면 기본적으로 "비서"로 행동
+
+기억 유형 구분 및 저장 기준:
+- 사용자가 선호도, 목표, 중요한 결정 등 개인 정보를 언급하면 즉시 save_memory로 장기 기억에 저장
+- 대화 중 언급된 내용을 참고할 때는 답변 끝에 `[대화 기억]` 표시
+- save_memory/get_memory로 저장된 장기 기억을 참고할 때는 답변 끝에 `[장기 기억]` 표시
+- 둘 다 사용했다면 `[대화 기억 · 장기 기억]` 함께 표시
+- 기억을 전혀 참고하지 않은 일반 답변에는 표시하지 않음
+
+주의:
+- 불확실한 정보는 검색으로 확인 후 답변
+- 파일 수정/생성/코드 실행 전에는 반드시 사용자 확인 요청
+"""
+
+HITL_TOOLS: dict[str, bool] = {
+    "edit_file": True,
+    "write_file": True,
+    "execute": True,
+}
+
+
+def create_orchestrator(
+    thread_id: str = "default",
+) -> tuple[CompiledStateGraph, RunnableConfig]:  # type: ignore[type-arg]
+    """Orchestrator 에이전트와 실행 설정을 생성한다.
+
+    Args:
+        thread_id: 대화 세션 ID (대화 히스토리 유지에 사용)
+
+    Returns:
+        (agent, config) 튜플
+    """
+    checkpointer = MemorySaver()
+
+    agent: CompiledStateGraph = create_deep_agent(  # type: ignore[type-arg]
+        model="openai:gpt-5.2",
+        tools=[
+            # 메모리
+            save_memory,
+            get_memory,
+            list_memories,
+            delete_memory,
+            # 노트 (빠른 조회용 — 상세 작업은 note 서브에이전트)
+            create_note,
+            list_notes,
+            search_notes,
+            # 비용
+            get_cost_summary,
+        ],
+        subagents=[RESEARCH_SUBAGENT, NOTE_SUBAGENT, FILE_SUBAGENT, CRON_SUBAGENT],  # type: ignore[list-item]
+        system_prompt=SYSTEM_PROMPT,
+        checkpointer=checkpointer,
+        interrupt_on=HITL_TOOLS,  # type: ignore[arg-type]
+        name="personal-assistant",
+    )
+
+    config: RunnableConfig = {
+        "configurable": {"thread_id": thread_id},
+        "callbacks": [AgentLoggingHandler()],
+    }
+
+    return agent, config

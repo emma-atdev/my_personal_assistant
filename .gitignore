@@ -1,0 +1,39 @@
+# 환경 변수
+.env
+.env.prod
+
+# 가상환경
+.venv
+
+# Python
+__pycache__
+*.pyc
+*.pyo
+*.pyd
+.mypy_cache
+.ruff_cache
+.pytest_cache
+*.egg-info
+
+# DB / 스토리지
+storage/local.db
+storage/*.db
+storage/*.json
+
+# 로그
+logs/
+
+# IDE
+.idea/
+.vscode/
+*.iml
+
+# macOS
+.DS_Store
+
+# Chainlit
+.chainlit/
+
+# 빌드
+dist/
+build/
