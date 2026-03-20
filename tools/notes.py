@@ -30,9 +30,7 @@ def create_note(title: str, content: str, tags: str = "") -> str:
 def get_note(note_id: int) -> str:
     """ID로 특정 메모를 조회한다."""
     with get_conn() as con:
-        row = con.execute(
-            f"SELECT * FROM notes WHERE id = {PH}", (note_id,)
-        ).fetchone()
+        row = con.execute(f"SELECT * FROM notes WHERE id = {PH}", (note_id,)).fetchone()
     if not row:
         return f"ID {note_id}인 메모를 찾을 수 없습니다."
     return (

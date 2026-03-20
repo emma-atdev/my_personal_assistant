@@ -55,7 +55,7 @@ class AgentLoggingHandler(BaseCallbackHandler):
 
     # ── LLM ───────────────────────────────────────────────────
 
-    def on_llm_start(
+    def on_chat_model_start(
         self,
         serialized: dict[str, Any],
         messages: list[list[BaseMessage]],
@@ -92,7 +92,9 @@ class AgentLoggingHandler(BaseCallbackHandler):
         output_text = ""
         if response.generations and response.generations[0]:
             gen = response.generations[0][0]
-            content = getattr(gen, "text", "") or str(getattr(gen, "message", {}).content if hasattr(getattr(gen, "message", None), "content") else "")
+            msg = getattr(gen, "message", None)
+            msg_content = getattr(msg, "content", None)
+            content = getattr(gen, "text", "") or (str(msg_content) if msg_content is not None else "")
             output_text = content[:300]
 
         agent_logger.info(

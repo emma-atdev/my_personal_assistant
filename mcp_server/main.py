@@ -21,7 +21,8 @@ def _is_allowed(path: str, access: str = "read") -> bool:
     """경로가 허용 목록에 포함되는지 확인한다."""
     config = _load_config()
     resolved = str(Path(path).expanduser().resolve())
-    for entry in config.get("allowed_directories", []):  # type: ignore[union-attr]
+    allowed: list[object] = config.get("allowed_directories") or []  # type: ignore[assignment]
+    for entry in allowed:
         if not isinstance(entry, dict):
             continue
         allowed_path = str(Path(str(entry.get("path", ""))).expanduser().resolve())

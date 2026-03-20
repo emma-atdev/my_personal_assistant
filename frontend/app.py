@@ -48,7 +48,7 @@ async def _stream_tokens(agent: object, config: object, user_input: str) -> None
                         yield text
 
 
-def _run_stream(user_input: str) -> Generator[str, None, None]:
+def _run_stream(user_input: str) -> Generator[str]:
     """async 스트리밍을 별도 스레드에서 실행해 sync generator로 변환한다."""
     agent = st.session_state.agent
     config = st.session_state.config

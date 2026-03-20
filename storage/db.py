@@ -2,9 +2,10 @@
 
 import os
 import sqlite3
+from collections.abc import Generator
 from contextlib import contextmanager
 from pathlib import Path
-from typing import Any, Generator
+from typing import Any
 
 DATABASE_URL = os.getenv("DATABASE_URL")
 IS_PG = bool(DATABASE_URL)
@@ -101,7 +102,7 @@ class _PgConnWrapper:
 
 
 @contextmanager
-def get_conn() -> Generator[Any, None, None]:
+def get_conn() -> Generator[Any]:
     """DATABASE_URL 유무에 따라 PostgreSQL 또는 SQLite 연결을 반환한다."""
     global _INITIALIZED
 
@@ -124,16 +125,16 @@ def get_conn() -> Generator[Any, None, None]:
     else:
         db_path = Path("storage/notes.db")
         db_path.parent.mkdir(exist_ok=True)
-        conn = sqlite3.connect(db_path)
-        conn.row_factory = sqlite3.Row
+        sqlite_conn = sqlite3.connect(db_path)
+        sqlite_conn.row_factory = sqlite3.Row
         if not _INITIALIZED:
-            _init_tables_sqlite(conn)
+            _init_tables_sqlite(sqlite_conn)
             _INITIALIZED = True
         try:
-            yield conn
-            conn.commit()
+            yield sqlite_conn
+            sqlite_conn.commit()
         except Exception:
-            conn.rollback()
+            sqlite_conn.rollback()
             raise
         finally:
-            conn.close()
+            sqlite_conn.close()

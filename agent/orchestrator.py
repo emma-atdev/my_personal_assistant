@@ -5,8 +5,6 @@ from langchain_core.runnables import RunnableConfig
 from langgraph.checkpoint.memory import MemorySaver
 from langgraph.graph.state import CompiledStateGraph
 
-from utils.logger import AgentLoggingHandler
-
 from agent.subagents.cron import CRON_SUBAGENT
 from agent.subagents.file import FILE_SUBAGENT
 from agent.subagents.note import NOTE_SUBAGENT
@@ -14,6 +12,7 @@ from agent.subagents.research import RESEARCH_SUBAGENT
 from tools.cost_tracker import get_cost_summary
 from tools.memory import delete_memory, get_memory, list_memories, save_memory
 from tools.notes import create_note, list_notes, search_notes
+from utils.logger import AgentLoggingHandler
 
 _SYSTEM_PROMPT_TEMPLATE = """
 LLM 전문 AI 개발자의 개인 비서입니다.
@@ -32,7 +31,8 @@ LLM 전문 AI 개발자의 개인 비서입니다.
 
 이름/페르소나:
 - 현재 이름: {assistant_name}
-- 사용자가 "너 이름은 OOO야", "이름을 OOO로 바꿔줘" 같은 말을 하면 즉시 save_memory("assistant_name", "OOO")로 저장하고 그 이름을 사용
+- 사용자가 "너 이름은 OOO야", "이름을 OOO로 바꿔줘" 같은 말을 하면
+  즉시 save_memory("assistant_name", "OOO")로 저장하고 그 이름을 사용
 
 기억 유형 구분 및 저장 기준:
 - 사용자가 선호도, 목표, 중요한 결정 등 개인 정보를 언급하면 즉시 save_memory로 장기 기억에 저장
@@ -56,6 +56,7 @@ HITL_TOOLS: dict[str, bool] = {
 def _get_assistant_name() -> str:
     """DB에서 비서 이름을 조회한다. 없으면 빈 문자열을 반환한다."""
     from tools.memory import get_memory
+
     result = get_memory("assistant_name")
     if "기억이 없습니다" in result:
         return ""

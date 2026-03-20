@@ -24,9 +24,7 @@ def save_memory(key: str, value: str) -> str:
 def get_memory(key: str) -> str:
     """저장된 특정 기억을 조회한다."""
     with get_conn() as con:
-        row = con.execute(
-            f"SELECT value FROM memories WHERE key = {PH}", (key,)
-        ).fetchone()
+        row = con.execute(f"SELECT value FROM memories WHERE key = {PH}", (key,)).fetchone()
     return row["value"] if row else f"'{key}'에 대한 기억이 없습니다."
 
 
