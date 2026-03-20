@@ -83,11 +83,15 @@ uv run --env-file .env uvicorn backend.app:app --reload --port 8000
 # 프론트엔드
 uv run --env-file .env streamlit run frontend/app.py --server.port 8001
 
-# MCP 서버 (로컬 파일 접근 시)
-uv run --env-file .env python mcp_server/main.py
-# 새 터미널에서
-ngrok http 8002 --domain=<your-ngrok-domain>
+# MCP 서버 (로컬 파일 접근 시) — 스크립트로 한번에 실행
+./scripts/start_mcp.sh
+
+# 종료
+./scripts/stop_mcp.sh
 ```
+
+> **주의**: MCP 서버는 로컬 맥북에서 실행되어야 합니다. 맥북이 슬립 상태이면 ngrok 연결이 끊깁니다.
+> 파일 접근이 필요할 때만 실행하면 되며, 꺼져 있어도 검색·메모·논문 등 다른 기능은 정상 동작합니다.
 
 ---
 
