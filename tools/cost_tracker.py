@@ -2,7 +2,7 @@
 
 from datetime import datetime
 
-from storage.db import PH, get_conn
+from storage.db import PH, get_conn, now_kst
 
 # 모델별 1토큰당 USD 비용
 PRICING: dict[str, dict[str, float]] = {
@@ -31,8 +31,9 @@ def log_usage(model: str, input_tokens: int, output_tokens: int) -> None:
     cost = input_tokens * pricing["input"] + output_tokens * pricing["output"]
     with get_conn() as con:
         con.execute(
-            f"INSERT INTO cost_logs (model, input_tokens, output_tokens, cost_usd) VALUES ({PH}, {PH}, {PH}, {PH})",
-            (model, input_tokens, output_tokens, round(cost, 6)),
+            f"INSERT INTO cost_logs (date, model, input_tokens, output_tokens, cost_usd)"
+            f" VALUES ({PH}, {PH}, {PH}, {PH}, {PH})",
+            (now_kst(), model, input_tokens, output_tokens, round(cost, 6)),
         )
 
 

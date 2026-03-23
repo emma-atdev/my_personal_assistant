@@ -1,27 +1,26 @@
 """노트 CRUD 툴 — SQLite(로컬) / PostgreSQL(Railway) 기반 메모 저장소."""
 
-from datetime import datetime
 from typing import Any
 
-from storage.db import PH, get_conn
+from storage.db import PH, get_conn, now_kst
 
 
 def create_note(title: str, content: str, tags: str = "") -> str:
     """새 메모를 저장한다. 정보 기록, 논문 노트, 아이디어 저장에 사용."""
+    now = now_kst()
     with get_conn() as con:
         if PH == "%s":
-            # PostgreSQL: RETURNING으로 id 반환
             cur = con.execute(
-                "INSERT INTO notes (title, content, tags) VALUES (%s, %s, %s) RETURNING id",
-                (title, content, tags),
+                "INSERT INTO notes (title, content, tags, created_at, updated_at)"
+                " VALUES (%s, %s, %s, %s, %s) RETURNING id",
+                (title, content, tags, now, now),
             )
             row = cur.fetchone()
             note_id = row["id"] if row else "?"
         else:
-            # SQLite: lastrowid로 id 확인
             cur = con.execute(
-                "INSERT INTO notes (title, content, tags) VALUES (?, ?, ?)",
-                (title, content, tags),
+                "INSERT INTO notes (title, content, tags, created_at, updated_at) VALUES (?, ?, ?, ?, ?)",
+                (title, content, tags, now, now),
             )
             note_id = cur.lastrowid
     return f"메모 저장 완료 (ID: {note_id}) — {title}"
@@ -79,11 +78,10 @@ def search_notes(query: str, limit: int = 5) -> str:
 
 def update_note(note_id: int, content: str) -> str:
     """기존 메모 내용을 수정한다."""
-    now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     with get_conn() as con:
         con.execute(
             f"UPDATE notes SET content = {PH}, updated_at = {PH} WHERE id = {PH}",
-            (content, now, note_id),
+            (content, now_kst(), note_id),
         )
     return f"메모 수정 완료 (ID: {note_id})"
 

@@ -1,16 +1,17 @@
 """장기 기억 툴 — 사용자 정보와 선호도를 DB에 저장한다."""
 
-from storage.db import PH, get_conn
+from storage.db import PH, get_conn, now_kst
 
 
 def save_memory(key: str, value: str) -> str:
     """사용자 정보나 선호도를 장기 기억에 저장한다. 나중에 다시 참조할 정보에 사용."""
+    now = now_kst()
     with get_conn() as con:
         if PH == "%s":
             con.execute(
-                "INSERT INTO memories (key, value) VALUES (%s, %s) "
-                "ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value, updated_at = NOW()",
-                (key, value),
+                "INSERT INTO memories (key, value, updated_at) VALUES (%s, %s, %s) "
+                "ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value, updated_at = EXCLUDED.updated_at",
+                (key, value, now),
             )
         else:
             con.execute(

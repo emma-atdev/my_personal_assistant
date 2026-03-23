@@ -4,8 +4,18 @@ import os
 import sqlite3
 from collections.abc import Generator
 from contextlib import contextmanager
+from datetime import datetime
 from pathlib import Path
 from typing import Any
+from zoneinfo import ZoneInfo
+
+KST = ZoneInfo("Asia/Seoul")
+
+
+def now_kst() -> str:
+    """현재 KST 시각을 DB 저장용 문자열로 반환한다."""
+    return datetime.now(KST).strftime("%Y-%m-%d %H:%M:%S")
+
 
 DATABASE_URL = os.getenv("DATABASE_URL")
 IS_PG = bool(DATABASE_URL)
