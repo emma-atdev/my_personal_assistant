@@ -129,9 +129,7 @@ def _extract_text(messages: list[object]) -> str:
             content = m.content
             if isinstance(content, list):
                 return " ".join(
-                    block["text"]
-                    for block in content
-                    if isinstance(block, dict) and block.get("type") == "text"
+                    block["text"] for block in content if isinstance(block, dict) and block.get("type") == "text"
                 )
             return str(content)
     return ""

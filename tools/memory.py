@@ -14,8 +14,7 @@ def save_memory(key: str, value: str) -> str:
             )
         else:
             con.execute(
-                "INSERT INTO memories (key, value) VALUES (?, ?) "
-                "ON CONFLICT(key) DO UPDATE SET value = excluded.value",
+                "INSERT INTO memories (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value",
                 (key, value),
             )
     return f"기억 저장 완료: {key} = {value}"

@@ -8,8 +8,7 @@ from tools.search import search_web
 RESEARCH_SUBAGENT: dict[str, object] = {
     "name": "research",
     "description": (
-        "웹 검색, AI 뉴스 조회, LLM 논문 탐색이 필요할 때 사용. "
-        "최신 정보 확인, ArXiv/HuggingFace 논문 수집 담당."
+        "웹 검색, AI 뉴스 조회, LLM 논문 탐색이 필요할 때 사용. 최신 정보 확인, ArXiv/HuggingFace 논문 수집 담당."
     ),
     "system_prompt": (
         "당신은 AI 리서치 전문가입니다. "

@@ -21,8 +21,7 @@ from tools.notion_tools import (
 NOTE_SUBAGENT: dict[str, object] = {
     "name": "note",
     "description": (
-        "메모 저장/조회/수정/삭제가 필요할 때 사용. "
-        "Notion 페이지 검색·조회·생성, CHANGELOG Notion 동기화도 담당."
+        "메모 저장/조회/수정/삭제가 필요할 때 사용. Notion 페이지 검색·조회·생성, CHANGELOG Notion 동기화도 담당."
     ),
     "system_prompt": (
         "당신은 지식 관리 전문가입니다.\n"

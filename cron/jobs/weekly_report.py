@@ -16,9 +16,7 @@ async def run_weekly_report() -> None:
     recent_notes = list_notes_raw(limit=30)
     cost_summary = get_cost_summary()
 
-    note_lines = "\n".join(
-        f"- **{n['title']}** (태그: {n['tags']}) — {n['created_at']}" for n in recent_notes
-    )
+    note_lines = "\n".join(f"- **{n['title']}** (태그: {n['tags']}) — {n['created_at']}" for n in recent_notes)
 
     content = f"""# 주간 리포트 — {week_label} 주
 

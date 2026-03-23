@@ -52,8 +52,7 @@ class DockerSandbox(BaseSandbox):
         )
         if result.returncode != 0:
             raise RuntimeError(
-                f"Docker 컨테이너 시작 실패: {result.stderr.strip()}\n"
-                "Docker Desktop이 실행 중인지 확인해 주세요."
+                f"Docker 컨테이너 시작 실패: {result.stderr.strip()}\nDocker Desktop이 실행 중인지 확인해 주세요."
             )
         self._container_id = result.stdout.strip()
 

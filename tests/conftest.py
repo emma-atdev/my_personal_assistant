@@ -46,6 +46,7 @@ def use_test_db(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
         "tools.cost_tracker",
     ]:
         import importlib
+
         mod = importlib.import_module(module_path)
         monkeypatch.setattr(mod, "get_conn", _test_get_conn)
         monkeypatch.setattr(mod, "PH", "?")

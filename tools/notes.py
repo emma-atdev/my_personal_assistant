@@ -33,12 +33,7 @@ def get_note(note_id: int) -> str:
         row = con.execute(f"SELECT * FROM notes WHERE id = {PH}", (note_id,)).fetchone()
     if not row:
         return f"ID {note_id}인 메모를 찾을 수 없습니다."
-    return (
-        f"# {row['title']} (ID: {row['id']})\n"
-        f"태그: {row['tags']}\n"
-        f"작성: {row['created_at']}\n\n"
-        f"{row['content']}"
-    )
+    return f"# {row['title']} (ID: {row['id']})\n태그: {row['tags']}\n작성: {row['created_at']}\n\n{row['content']}"
 
 
 def list_notes(limit: int = 20) -> str:
