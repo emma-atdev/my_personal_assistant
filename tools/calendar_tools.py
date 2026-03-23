@@ -4,10 +4,13 @@ import os
 from datetime import UTC, datetime, timedelta
 from functools import lru_cache
 from typing import Any
+from zoneinfo import ZoneInfo
 
 from google.oauth2.credentials import Credentials
 from googleapiclient.discovery import build
 from googleapiclient.errors import HttpError
+
+KST = ZoneInfo("Asia/Seoul")
 
 SCOPES = ["https://www.googleapis.com/auth/calendar"]
 
@@ -147,7 +150,7 @@ def get_today_schedule() -> str:
     Returns:
         오늘 일정 목록
     """
-    now = datetime.now(UTC)
+    now = datetime.now(KST)
     today_start = now.replace(hour=0, minute=0, second=0, microsecond=0)
     today_end = today_start + timedelta(days=1)
 

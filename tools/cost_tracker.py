@@ -14,7 +14,9 @@ PRICING: dict[str, dict[str, float]] = {
 
 def log_usage(model: str, input_tokens: int, output_tokens: int) -> None:
     """API 토큰 사용량을 기록한다 (내부 사용)."""
-    pricing = PRICING.get(model, {"input": 0.0, "output": 0.0})
+    # "openai:gpt-5.2" → "gpt-5.2" 형태로 정규화
+    normalized = model.split(":")[-1] if ":" in model else model
+    pricing = PRICING.get(normalized, PRICING.get(model, {"input": 0.0, "output": 0.0}))
     cost = input_tokens * pricing["input"] + output_tokens * pricing["output"]
     with get_conn() as con:
         con.execute(

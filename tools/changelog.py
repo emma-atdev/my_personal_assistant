@@ -48,9 +48,17 @@ def append_changelog(summary: str, files: str | None = None) -> str:
         )
     else:
         # 새 날짜 섹션 추가 (헤더 바로 뒤)
-        header_end = content.find("\n\n", content.find("# Changelog")) + 2
         new_section = f"{date_header}\n{entry}\n\n"
-        content = content[:header_end] + new_section + content[header_end:]
+        changelog_pos = content.find("# Changelog")
+        if changelog_pos == -1:
+            content = content.rstrip() + f"\n\n{new_section}"
+        else:
+            newline_pos = content.find("\n\n", changelog_pos)
+            if newline_pos == -1:
+                content = content.rstrip() + f"\n\n{new_section}"
+            else:
+                header_end = newline_pos + 2
+                content = content[:header_end] + new_section + content[header_end:]
 
     CHANGELOG_PATH.write_text(content, encoding="utf-8")
     return f"CHANGELOG.md에 기록 완료: {summary}"
