@@ -19,8 +19,8 @@ uv run pytest tests/ -v
 ## 개발 Workflow
 
 1. 새 기능은 `tests/`에 테스트 먼저 작성
-2. 구현 후 `uv run mypy .` → `uv run ruff check .` → `uv run pytest tests/ -v` 순서로 검증
-3. 세 가지 모두 통과해야 완료로 간주
+2. 구현 후 `uv run mypy .` → `uv run ruff check .` → `uv run ruff format .` → `uv run pytest tests/ -v` 순서로 검증
+3. 네 가지 모두 통과해야 완료로 간주 (ruff format 빠뜨리면 CI 실패)
 4. 새 툴 추가 시 → docstring 필수 작성 후 에이전트에 등록
 
 ## 아키텍처

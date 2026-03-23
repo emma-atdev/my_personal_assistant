@@ -4,7 +4,7 @@ import json
 from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
 
-from fastapi import FastAPI, WebSocket, WebSocketDisconnect
+from fastapi import BackgroundTasks, FastAPI, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
 
 from cron.jobs.morning_briefing import run_morning_briefing
@@ -112,20 +112,14 @@ async def broadcast_message(body: dict[str, str]) -> dict[str, str]:
 
 
 @app.post("/api/cron/morning-briefing")
-async def trigger_morning_briefing() -> dict[str, str]:
-    """아침 브리핑을 즉시 실행한다 (수동 트리거)."""
-    try:
-        await run_morning_briefing()
-        return {"status": "ok", "message": "아침 브리핑 완료"}
-    except Exception as e:
-        return {"status": "error", "message": str(e)}
+async def trigger_morning_briefing(background_tasks: BackgroundTasks) -> dict[str, str]:
+    """아침 브리핑을 백그라운드에서 실행한다 (수동 트리거)."""
+    background_tasks.add_task(run_morning_briefing)
+    return {"status": "ok", "message": "아침 브리핑 시작됨 (백그라운드 실행 중)"}
 
 
 @app.post("/api/cron/weekly-report")
-async def trigger_weekly_report() -> dict[str, str]:
-    """주간 리포트를 즉시 실행한다 (수동 트리거)."""
-    try:
-        await run_weekly_report()
-        return {"status": "ok", "message": "주간 리포트 완료"}
-    except Exception as e:
-        return {"status": "error", "message": str(e)}
+async def trigger_weekly_report(background_tasks: BackgroundTasks) -> dict[str, str]:
+    """주간 리포트를 백그라운드에서 실행한다 (수동 트리거)."""
+    background_tasks.add_task(run_weekly_report)
+    return {"status": "ok", "message": "주간 리포트 시작됨 (백그라운드 실행 중)"}
