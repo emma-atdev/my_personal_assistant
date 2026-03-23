@@ -8,9 +8,12 @@ from datetime import datetime
 from typing import Any
 
 import streamlit as st
+from dotenv import load_dotenv
 from langchain_core.messages import AIMessage, HumanMessage
 
-from agent.orchestrator import create_orchestrator
+load_dotenv()  # .env 로드 후 에이전트 임포트
+
+from agent.orchestrator import create_orchestrator  # noqa: E402
 
 st.set_page_config(page_title="개인 비서", page_icon="🤖", layout="wide")
 
@@ -27,9 +30,12 @@ _QUICK_ACTIONS = [
 ]
 
 _TOOL_LABELS: dict[str, str] = {
+    "task": "🤖 서브에이전트 실행 중",
     "tavily_search_results_json": "🔍 웹 검색 중",
+    "search_web": "🔍 웹 검색 중",
     "fetch_arxiv_papers": "📚 논문 검색 중",
     "fetch_hf_daily_papers": "📚 논문 검색 중",
+    "fetch_pwc_trending": "📚 논문 트렌드 조회 중",
     "search_notes": "📝 메모 검색 중",
     "create_note": "📝 메모 저장 중",
     "list_notes": "📝 메모 목록 조회 중",
@@ -94,6 +100,10 @@ async def _stream_events(agent: Any, config: Any, user_input: str) -> AsyncGener
         etype = event["event"]
 
         if etype == "on_chat_model_stream":
+            # 서브에이전트 출력 제외 — 서브에이전트는 checkpoint_ns가 'tools:'로 시작
+            metadata = event.get("metadata", {})
+            if metadata.get("checkpoint_ns", "").startswith("tools:"):
+                continue
             chunk = event["data"].get("chunk")
             if not chunk or not hasattr(chunk, "content"):
                 continue
@@ -108,10 +118,13 @@ async def _stream_events(agent: Any, config: Any, user_input: str) -> AsyncGener
                             yield {"type": "token", "text": text}
 
         elif etype == "on_tool_start":
-            yield {"type": "tool_start", "name": event.get("name", "")}
+            # 서브에이전트 내부 툴은 제외 — 오케스트레이터 레벨 툴만 표시
+            if not event.get("metadata", {}).get("checkpoint_ns", "").startswith("tools:"):
+                yield {"type": "tool_start", "name": event.get("name", "")}
 
         elif etype == "on_tool_end":
-            yield {"type": "tool_end", "name": event.get("name", "")}
+            if not event.get("metadata", {}).get("checkpoint_ns", "").startswith("tools:"):
+                yield {"type": "tool_end", "name": event.get("name", "")}
 
         elif etype == "on_chat_model_end":
             output = event["data"].get("output")
@@ -134,9 +147,13 @@ def _run_events(user_input: str) -> Generator[dict[str, Any]]:
     event_queue: queue.Queue[dict[str, Any] | None] = queue.Queue()
 
     async def _producer() -> None:
-        async for ev in _stream_events(agent, config, user_input):
-            event_queue.put(ev)
-        event_queue.put(None)
+        try:
+            async for ev in _stream_events(agent, config, user_input):
+                event_queue.put(ev)
+        except Exception:  # noqa: BLE001
+            pass
+        finally:
+            event_queue.put(None)
 
     def _thread_target() -> None:
         loop = asyncio.new_event_loop()
