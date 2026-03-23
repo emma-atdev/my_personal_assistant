@@ -81,12 +81,42 @@ class AgentLoggingHandler(BaseCallbackHandler):
         run_id: UUID,
         **kwargs: Any,
     ) -> None:
+        from tools.cost_tracker import log_usage
+
         elapsed = time.perf_counter() - self._start_times.pop(str(run_id), time.perf_counter())
 
-        # 토큰 사용량
-        usage = {}
+        # 토큰 사용량 — llm_output(구버전) 또는 usage_metadata(신버전) 순으로 시도
+        input_tokens: int = 0
+        output_tokens: int = 0
+        model_name = "unknown"
+
         if response.llm_output:
-            usage = response.llm_output.get("token_usage", {})
+            model_name = response.llm_output.get("model_name", model_name)
+            old_usage = response.llm_output.get("token_usage", {})
+            input_tokens = old_usage.get("prompt_tokens", 0)
+            output_tokens = old_usage.get("completion_tokens", 0)
+
+        if input_tokens == 0 and response.generations and response.generations[0]:
+            gen = response.generations[0][0]
+            msg = getattr(gen, "message", None)
+            meta = getattr(msg, "usage_metadata", None)
+            if meta:
+                if isinstance(meta, dict):
+                    input_tokens = meta.get("input_tokens", 0)
+                    output_tokens = meta.get("output_tokens", 0)
+                else:
+                    input_tokens = getattr(meta, "input_tokens", 0)
+                    output_tokens = getattr(meta, "output_tokens", 0)
+            if not model_name or model_name == "unknown":
+                resp_meta = getattr(msg, "response_metadata", {}) or {}
+                model_name = resp_meta.get("model_name", resp_meta.get("model", model_name))
+
+        # DB 비용 기록
+        if input_tokens + output_tokens > 0 and model_name != "unknown":
+            try:
+                log_usage(model_name, input_tokens, output_tokens)
+            except Exception:  # noqa: BLE001
+                pass
 
         # 응답 텍스트 요약
         output_text = ""
@@ -97,11 +127,13 @@ class AgentLoggingHandler(BaseCallbackHandler):
             content = getattr(gen, "text", "") or (str(msg_content) if msg_content is not None else "")
             output_text = content[:300]
 
+        in_str = str(input_tokens) if input_tokens else "?"
+        out_str = str(output_tokens) if output_tokens else "?"
         agent_logger.info(
             "LLM 응답 | %.2f초 | 입력 %s토큰 | 출력 %s토큰 | 응답: %s",
             elapsed,
-            usage.get("prompt_tokens", "?"),
-            usage.get("completion_tokens", "?"),
+            in_str,
+            out_str,
             output_text,
         )
 

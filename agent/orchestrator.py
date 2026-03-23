@@ -15,10 +15,12 @@ from tools.calendar_tools import create_event, get_today_schedule, list_events
 from tools.changelog import append_changelog, read_changelog
 from tools.cost_tracker import get_cost_summary
 from tools.memory import delete_memory, get_memory, list_memories, save_memory
-from tools.notes import create_note, list_notes, search_notes
+from tools.notes import create_note, get_note, list_notes, search_notes
 from utils.logger import AgentLoggingHandler
 
 _SYSTEM_PROMPT_TEMPLATE = """
+오늘 날짜: {today}
+
 LLM 전문 AI 개발자의 개인 비서입니다.
 
 역할:
@@ -57,6 +59,8 @@ Changelog 기록 기준 (append_changelog 자동 호출):
 주의:
 - 불확실한 정보는 검색으로 확인 후 답변
 - 파일 수정/생성/코드 실행 전에는 반드시 사용자 확인 요청
+- 서브에이전트가 반환한 결과는 그대로 사용자에게 전달할 것 — 재요약·재작성·반복 절대 금지
+- 논문 브리핑·리포트 등 장문 결과는 서브에이전트 출력을 그대로 붙여넣을 것
 """
 
 HITL_TOOLS: dict[str, bool] = {
@@ -93,7 +97,11 @@ def create_orchestrator(
     else:
         assistant_name = "아직 이름이 없습니다. 첫 대화에서 사용자에게 이름을 지어달라고 요청하세요."
 
-    system_prompt = _SYSTEM_PROMPT_TEMPLATE.format(assistant_name=assistant_name)
+    from datetime import date
+    system_prompt = _SYSTEM_PROMPT_TEMPLATE.format(
+        assistant_name=assistant_name,
+        today=date.today().strftime("%Y년 %m월 %d일"),
+    )
     checkpointer = MemorySaver()
 
     agent: CompiledStateGraph = create_deep_agent(  # type: ignore[type-arg]
@@ -106,6 +114,7 @@ def create_orchestrator(
             delete_memory,
             # 노트 (빠른 조회용 — 상세 작업은 note 서브에이전트)
             create_note,
+            get_note,
             list_notes,
             search_notes,
             # 캘린더

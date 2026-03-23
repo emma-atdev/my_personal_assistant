@@ -40,7 +40,7 @@ def list_my_issues(state: str = "open", limit: int = 20) -> str:
                 break
             repo_name = issue.repository.full_name
             results.append(f"[{repo_name}#{issue.number}] {issue.title}\n  {issue.html_url}")
-        return "\n\n".join(results) if results else f"담당 이슈 없음 (state={state})"
+        return "\n\n".join(results) if results else f"토큰 인증 계정 기준 담당 이슈 없음 (state={state})"
     except GithubException as e:
         return f"GitHub API 오류: {e}"
 
@@ -71,7 +71,7 @@ def list_my_prs(state: str = "open", limit: int = 20) -> str:
             pr_info = pr.pull_request
             label = "merged" if (pr_info and pr_info.merged_at) else state
             results.append(f"[{repo_name}#{pr.number}] ({label}) {pr.title}\n  {pr.html_url}")
-        return "\n\n".join(results) if results else f"해당하는 PR 없음 (state={state})"
+        return "\n\n".join(results) if results else f"토큰 인증 계정 기준 해당하는 PR 없음 (state={state})"
     except GithubException as e:
         return f"GitHub API 오류: {e}"
 
