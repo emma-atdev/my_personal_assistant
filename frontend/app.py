@@ -233,20 +233,6 @@ def _extract_text(messages: list[object]) -> str:
     return ""
 
 
-# ── 복사 버튼 ─────────────────────────────────────────────────
-
-
-def _copy_button(text: str, key: str) -> None:
-    """클립보드 복사 버튼을 렌더링한다."""
-    escaped = text.replace("\\", "\\\\").replace("`", "\\`")
-    st.markdown(
-        f'<button onclick="navigator.clipboard.writeText(`{escaped}`)" '
-        'style="border:1px solid #ddd;background:transparent;cursor:pointer;'
-        'color:#888;font-size:11px;padding:2px 8px;border-radius:4px;margin-top:4px;"'
-        f' id="copy-{key}">📋 복사</button>',
-        unsafe_allow_html=True,
-    )
-
 
 # ── 사용자 입력 처리 ──────────────────────────────────────────
 
@@ -286,9 +272,6 @@ def _handle_user_input(user_input: str) -> None:
             st.session_state.total_tokens["input"] += session_tokens["input"]
             st.session_state.total_tokens["output"] += session_tokens["output"]
 
-        # 응답 복사 버튼
-        msg_idx = len(st.session_state.messages)
-        _copy_button(full_response, str(msg_idx))
 
     st.session_state.messages.append({"role": "assistant", "content": full_response})
     _handle_hitl()
@@ -364,8 +347,6 @@ def main() -> None:
     for i, msg in enumerate(st.session_state.messages):
         with st.chat_message(msg["role"]):
             st.markdown(msg["content"])
-            if msg["role"] == "assistant":
-                _copy_button(msg["content"], f"hist_{i}")
 
     # 빠른 실행 버튼 쿼리 처리
     if st.session_state.quick_input:
