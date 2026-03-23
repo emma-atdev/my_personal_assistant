@@ -11,6 +11,7 @@ from agent.subagents.file import FILE_SUBAGENT
 from agent.subagents.github import GITHUB_SUBAGENT
 from agent.subagents.note import NOTE_SUBAGENT
 from agent.subagents.research import RESEARCH_SUBAGENT
+from tools.calendar_tools import create_event, get_today_schedule, list_events
 from tools.changelog import append_changelog, read_changelog
 from tools.cost_tracker import get_cost_summary
 from tools.memory import delete_memory, get_memory, list_memories, save_memory
@@ -33,6 +34,7 @@ LLM 전문 AI 개발자의 개인 비서입니다.
 - cron: 브리핑 생성, 리포트 작성
 - code: Python 코드 작성·실행, 수학 계산, 데이터 분석 (Docker 샌드박스)
 - github: GitHub 이슈/PR 조회·생성·댓글, 할일 확인
+- 캘린더: 오늘/이번 주 일정 조회, 일정 생성은 get_today_schedule/list_events/create_event 직접 사용
 
 이름/페르소나:
 - 현재 이름: {assistant_name}
@@ -106,6 +108,10 @@ def create_orchestrator(
             create_note,
             list_notes,
             search_notes,
+            # 캘린더
+            get_today_schedule,
+            list_events,
+            create_event,
             # 비용
             get_cost_summary,
             # 변경 이력
