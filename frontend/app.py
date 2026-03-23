@@ -118,11 +118,14 @@ async def _stream_events(agent: Any, config: Any, user_input: str) -> AsyncGener
             output = event["data"].get("output")
             if output and hasattr(output, "usage_metadata") and output.usage_metadata:
                 usage = output.usage_metadata
-                yield {
-                    "type": "usage",
-                    "input_tokens": usage.get("input_tokens", 0),
-                    "output_tokens": usage.get("output_tokens", 0),
-                }
+                # usage_metadata는 dict 또는 UsageMetadata 객체일 수 있음
+                if isinstance(usage, dict):
+                    input_t = usage.get("input_tokens", 0)
+                    output_t = usage.get("output_tokens", 0)
+                else:
+                    input_t = getattr(usage, "input_tokens", 0)
+                    output_t = getattr(usage, "output_tokens", 0)
+                yield {"type": "usage", "input_tokens": input_t, "output_tokens": output_t}
 
 
 def _run_events(user_input: str) -> Generator[dict[str, Any]]:
@@ -189,8 +192,13 @@ def _handle_hitl() -> None:
         last_msg = messages[-1]
         tool_calls = getattr(last_msg, "tool_calls", [])
         if tool_calls:
-            tool_name = tool_calls[0].get("name", tool_name)
-            tool_args = tool_calls[0].get("args", {})
+            tc = tool_calls[0]
+            if isinstance(tc, dict):
+                tool_name = tc.get("name", tool_name)
+                tool_args = tc.get("args", {})
+            else:
+                tool_name = getattr(tc, "name", tool_name)
+                tool_args = getattr(tc, "args", {})
 
     if "hitl_confirmed" not in st.session_state:
         _hitl_dialog(tool_name, tool_args)
