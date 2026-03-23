@@ -1,63 +1,140 @@
 """Streamlit 채팅 UI — 개인 비서 프론트엔드."""
 
 import asyncio
+import json
 import queue
 import threading
-import uuid
-from collections.abc import Generator
+from collections.abc import AsyncGenerator, Generator
+from datetime import datetime
+from typing import Any
 
 import streamlit as st
 from langchain_core.messages import AIMessage, HumanMessage
 
 from agent.orchestrator import create_orchestrator
 
-st.set_page_config(page_title="개인 비서", layout="wide")
+st.set_page_config(page_title="개인 비서", page_icon="🤖", layout="wide")
+
+# ── 상수 ─────────────────────────────────────────────────────
+
+_QUICK_ACTIONS = [
+    ("📅 오늘 일정", "오늘 일정 알려줘"),
+    ("🗓️ 이번 주 일정", "이번 주 일정 알려줘"),
+    ("🐙 내 이슈", "내 GitHub 이슈 목록 알려줘"),
+    ("🔀 내 PR", "내 GitHub PR 목록 알려줘"),
+    ("📄 논문 브리핑", "최신 AI 논문 브리핑해줘"),
+    ("📝 Changelog", "changelog 보여줘"),
+    ("💰 API 비용", "이번 달 API 비용 알려줘"),
+]
+
+_TOOL_LABELS: dict[str, str] = {
+    "tavily_search_results_json": "🔍 웹 검색 중",
+    "fetch_arxiv_papers": "📚 논문 검색 중",
+    "fetch_hf_daily_papers": "📚 논문 검색 중",
+    "search_notes": "📝 메모 검색 중",
+    "create_note": "📝 메모 저장 중",
+    "list_notes": "📝 메모 목록 조회 중",
+    "save_memory": "💾 기억 저장 중",
+    "get_memory": "🧠 기억 조회 중",
+    "list_memories": "🧠 기억 목록 조회 중",
+    "delete_memory": "🧠 기억 삭제 중",
+    "list_events": "📅 일정 조회 중",
+    "create_event": "📅 일정 생성 중",
+    "get_today_schedule": "📅 오늘 일정 조회 중",
+    "get_cost_summary": "💰 비용 확인 중",
+    "append_changelog": "📝 Changelog 기록 중",
+    "read_changelog": "📝 Changelog 조회 중",
+    "list_my_issues": "🐙 이슈 조회 중",
+    "list_my_prs": "🔀 PR 조회 중",
+    "get_issue": "🐙 이슈 상세 조회 중",
+    "create_issue": "🐙 이슈 생성 중",
+    "comment_on_issue": "💬 댓글 작성 중",
+    "list_repo_issues": "🐙 레포 이슈 조회 중",
+    "search_notion": "📓 Notion 검색 중",
+    "get_notion_page": "📓 Notion 페이지 조회 중",
+    "create_notion_page": "📓 Notion 페이지 생성 중",
+    "append_notion_block": "📓 Notion 내용 추가 중",
+    "sync_changelog_to_notion": "📓 Notion 동기화 중",
+    "execute": "⚙️ 코드 실행 중",
+    "write_file": "📁 파일 작성 중",
+    "edit_file": "📁 파일 수정 중",
+    "read_file": "📁 파일 읽는 중",
+}
+
+
+def _tool_label(name: str) -> str:
+    return _TOOL_LABELS.get(name, f"🔧 {name} 실행 중")
+
+
+# ── 세션 초기화 ───────────────────────────────────────────────
 
 
 def _init_session() -> None:
-    if "session_id" not in st.session_state:
-        st.session_state.session_id = str(uuid.uuid4())
     if "agent" not in st.session_state:
-        agent, config = create_orchestrator(thread_id=st.session_state.session_id)
+        agent, config = create_orchestrator(thread_id="default")
         st.session_state.agent = agent
         st.session_state.config = config
     if "messages" not in st.session_state:
         st.session_state.messages = []
+    if "quick_input" not in st.session_state:
+        st.session_state.quick_input = ""
+    if "total_tokens" not in st.session_state:
+        st.session_state.total_tokens = {"input": 0, "output": 0}
 
 
-async def _stream_tokens(agent: object, config: object, user_input: str) -> None:
-    """에이전트 스트리밍 이벤트를 큐에 전달한다."""
-    async for event in agent.astream_events(  # type: ignore[union-attr]
+# ── 이벤트 스트리밍 ───────────────────────────────────────────
+
+
+async def _stream_events(agent: Any, config: Any, user_input: str) -> AsyncGenerator[dict[str, Any]]:
+    """에이전트 이벤트를 스트리밍한다."""
+    async for event in agent.astream_events(
         {"messages": [HumanMessage(content=user_input)]},
         config,
         version="v2",
     ):
-        if event["event"] != "on_chat_model_stream":
-            continue
-        chunk = event["data"].get("chunk")
-        if not chunk or not hasattr(chunk, "content"):
-            continue
-        content = chunk.content
-        if isinstance(content, str) and content:
-            yield content
-        elif isinstance(content, list):
-            for block in content:
-                if isinstance(block, dict) and block.get("type") == "text":
-                    text = block.get("text", "")
-                    if text:
-                        yield text
+        etype = event["event"]
+
+        if etype == "on_chat_model_stream":
+            chunk = event["data"].get("chunk")
+            if not chunk or not hasattr(chunk, "content"):
+                continue
+            content = chunk.content
+            if isinstance(content, str) and content:
+                yield {"type": "token", "text": content}
+            elif isinstance(content, list):
+                for block in content:
+                    if isinstance(block, dict) and block.get("type") == "text":
+                        text = block.get("text", "")
+                        if text:
+                            yield {"type": "token", "text": text}
+
+        elif etype == "on_tool_start":
+            yield {"type": "tool_start", "name": event.get("name", "")}
+
+        elif etype == "on_tool_end":
+            yield {"type": "tool_end", "name": event.get("name", "")}
+
+        elif etype == "on_chat_model_end":
+            output = event["data"].get("output")
+            if output and hasattr(output, "usage_metadata") and output.usage_metadata:
+                usage = output.usage_metadata
+                yield {
+                    "type": "usage",
+                    "input_tokens": usage.get("input_tokens", 0),
+                    "output_tokens": usage.get("output_tokens", 0),
+                }
 
 
-def _run_stream(user_input: str) -> Generator[str]:
-    """async 스트리밍을 별도 스레드에서 실행해 sync generator로 변환한다."""
+def _run_events(user_input: str) -> Generator[dict[str, Any]]:
+    """async 이벤트 스트리밍을 sync generator로 변환한다."""
     agent = st.session_state.agent
     config = st.session_state.config
-    token_queue: queue.Queue[str | None] = queue.Queue()
+    event_queue: queue.Queue[dict[str, Any] | None] = queue.Queue()
 
     async def _producer() -> None:
-        async for token in _stream_tokens(agent, config, user_input):
-            token_queue.put(token)
-        token_queue.put(None)
+        async for ev in _stream_events(agent, config, user_input):
+            event_queue.put(ev)
+        event_queue.put(None)
 
     def _thread_target() -> None:
         loop = asyncio.new_event_loop()
@@ -71,24 +148,30 @@ def _run_stream(user_input: str) -> Generator[str]:
     thread.start()
 
     while True:
-        token = token_queue.get()
-        if token is None:
+        ev = event_queue.get()
+        if ev is None:
             break
-        yield token
+        yield ev
 
     thread.join()
 
 
+# ── HITL ─────────────────────────────────────────────────────
+
+
 @st.dialog("확인이 필요합니다")
-def _hitl_dialog(tool_info: str) -> None:
-    st.warning(f"실행 예정: `{tool_info}`")
+def _hitl_dialog(tool_name: str, tool_args: dict[str, Any]) -> None:
+    st.warning(f"**{_tool_label(tool_name)}** 실행 전 확인이 필요합니다.")
+    if tool_args:
+        st.markdown("**실행 인수:**")
+        st.json(tool_args)
     col1, col2 = st.columns(2)
     with col1:
-        if st.button("확인", use_container_width=True):
+        if st.button("✅ 확인", use_container_width=True):
             st.session_state.hitl_confirmed = True
             st.rerun()
     with col2:
-        if st.button("취소", use_container_width=True):
+        if st.button("❌ 취소", use_container_width=True):
             st.session_state.hitl_confirmed = False
             st.rerun()
 
@@ -98,16 +181,24 @@ def _handle_hitl() -> None:
     if not state.next:
         return
 
-    pending_tools = [t.name for t in getattr(state, "tasks", [])]
-    tool_info = ", ".join(pending_tools) if pending_tools else "알 수 없는 작업"
+    # 마지막 AIMessage의 tool_calls에서 도구명·인수 추출
+    messages = state.values.get("messages", [])
+    tool_name = "알 수 없는 작업"
+    tool_args: dict[str, Any] = {}
+    if messages:
+        last_msg = messages[-1]
+        tool_calls = getattr(last_msg, "tool_calls", [])
+        if tool_calls:
+            tool_name = tool_calls[0].get("name", tool_name)
+            tool_args = tool_calls[0].get("args", {})
 
     if "hitl_confirmed" not in st.session_state:
-        _hitl_dialog(tool_info)
+        _hitl_dialog(tool_name, tool_args)
         return
 
     confirmed = st.session_state.pop("hitl_confirmed")
 
-    def _run_async(coro):  # type: ignore[no-untyped-def]
+    def _run_async(coro: Any) -> Any:
         loop = asyncio.new_event_loop()
         asyncio.set_event_loop(loop)
         try:
@@ -135,34 +226,156 @@ def _extract_text(messages: list[object]) -> str:
     return ""
 
 
+# ── 복사 버튼 ─────────────────────────────────────────────────
+
+
+def _copy_button(text: str, key: str) -> None:
+    """클립보드 복사 버튼을 렌더링한다."""
+    # JSON으로 이스케이프해 JS 인젝션 방지
+    json_text = json.dumps(text)
+    html = f"""
+    <button
+        onclick="navigator.clipboard.writeText({json_text}).then(()=>{{
+            this.innerText='✅ 복사됨';
+            setTimeout(()=>this.innerText='📋 복사',1500);
+        }})"
+        style="border:1px solid #ddd;background:transparent;cursor:pointer;
+               color:#888;font-size:11px;padding:2px 8px;border-radius:4px;
+               margin-top:4px;"
+        id="copy-{key}"
+    >📋 복사</button>
+    """
+    st.components.v1.html(html, height=32)
+
+
+# ── 사용자 입력 처리 ──────────────────────────────────────────
+
+
+def _handle_user_input(user_input: str) -> None:
+    """사용자 입력을 처리하고 응답을 스트리밍한다."""
+    st.session_state.messages.append({"role": "user", "content": user_input})
+    with st.chat_message("user"):
+        st.markdown(user_input)
+
+    with st.chat_message("assistant"):
+        status_box = st.empty()
+        text_box = st.empty()
+
+        full_response = ""
+        session_tokens = {"input": 0, "output": 0}
+
+        for ev in _run_events(user_input):
+            if ev["type"] == "token":
+                full_response += ev["text"]
+                text_box.markdown(full_response + "▌")
+            elif ev["type"] == "tool_start":
+                status_box.info(_tool_label(ev["name"]))
+            elif ev["type"] == "tool_end":
+                status_box.empty()
+            elif ev["type"] == "usage":
+                session_tokens["input"] += ev["input_tokens"]
+                session_tokens["output"] += ev["output_tokens"]
+
+        text_box.markdown(full_response)
+        status_box.empty()
+
+        # 이번 응답 토큰 표시
+        total = session_tokens["input"] + session_tokens["output"]
+        if total > 0:
+            st.caption(f"↑ {session_tokens['input']:,} · ↓ {session_tokens['output']:,} 토큰")
+            st.session_state.total_tokens["input"] += session_tokens["input"]
+            st.session_state.total_tokens["output"] += session_tokens["output"]
+
+        # 응답 복사 버튼
+        msg_idx = len(st.session_state.messages)
+        _copy_button(full_response, str(msg_idx))
+
+    st.session_state.messages.append({"role": "assistant", "content": full_response})
+    _handle_hitl()
+
+
+# ── 내보내기 ──────────────────────────────────────────────────
+
+
+def _export_chat() -> str:
+    """대화 내역을 Markdown으로 변환한다."""
+    lines = [f"# 대화 내역 ({datetime.now().strftime('%Y-%m-%d %H:%M')})\n"]
+    for msg in st.session_state.messages:
+        role = "사용자" if msg["role"] == "user" else "비서"
+        lines.append(f"**{role}:**\n\n{msg['content']}\n")
+    return "\n---\n".join(lines)
+
+
+# ── 메인 ─────────────────────────────────────────────────────
+
+
 def main() -> None:
     _init_session()
 
     with st.sidebar:
-        st.title("개인 비서")
+        st.markdown("## 🤖 개인 비서")
+        st.caption("LLM 전문 AI 개발자를 위한 비서")
+
+        total_in = st.session_state.total_tokens["input"]
+        total_out = st.session_state.total_tokens["output"]
+        if total_in + total_out > 0:
+            st.caption(f"세션 토큰  ↑ {total_in:,} · ↓ {total_out:,}")
+
+        st.divider()
+
+        st.markdown("**⚡ 빠른 실행**")
+        for label, query in _QUICK_ACTIONS:
+            if st.button(label, use_container_width=True, key=f"quick_{label}"):
+                st.session_state.quick_input = query
+
+        st.divider()
         st.markdown(
-            "**가능한 것들:**\n"
-            "- 웹 검색 및 최신 정보 조회\n"
-            "- ArXiv · HuggingFace 논문 탐색\n"
-            "- 메모 저장 및 검색\n"
-            "- 로컬 파일 분석 (MCP 연결 시)\n"
-            "- API 비용 확인"
+            "**🛠️ 기능 목록**\n\n"
+            "🔍 웹 검색 · 최신 정보 조회\n\n"
+            "📚 ArXiv · HuggingFace 논문 탐색\n\n"
+            "🐙 GitHub 이슈/PR 조회 · 생성 · 댓글\n\n"
+            "📓 Notion 페이지 검색 · 조회 · 생성\n\n"
+            "📅 Google Calendar 일정 조회 · 생성\n\n"
+            "🐍 Python 코드 실행 (Modal 샌드박스)\n\n"
+            "📁 로컬 파일 분석 (MCP 연결 시)\n\n"
+            "💰 API 비용 확인\n\n"
+            "📝 Changelog 자동 기록"
         )
 
-    for msg in st.session_state.messages:
+        st.divider()
+
+        col1, col2 = st.columns(2)
+        with col1:
+            if st.button("🗑️ 초기화", use_container_width=True):
+                st.session_state.messages = []
+                st.session_state.total_tokens = {"input": 0, "output": 0}
+                st.rerun()
+        with col2:
+            if st.session_state.messages:
+                st.download_button(
+                    "⬇️ 내보내기",
+                    data=_export_chat(),
+                    file_name=f"chat_{datetime.now().strftime('%Y%m%d_%H%M')}.md",
+                    mime="text/markdown",
+                    use_container_width=True,
+                )
+
+    # ── 채팅 영역 ─────────────────────────────────────────────
+    for i, msg in enumerate(st.session_state.messages):
         with st.chat_message(msg["role"]):
             st.markdown(msg["content"])
+            if msg["role"] == "assistant":
+                _copy_button(msg["content"], f"hist_{i}")
+
+    # 빠른 실행 버튼 쿼리 처리
+    if st.session_state.quick_input:
+        user_input = st.session_state.quick_input
+        st.session_state.quick_input = ""
+        _handle_user_input(user_input)
+        st.rerun()
 
     if user_input := st.chat_input("메시지를 입력하세요..."):
-        st.session_state.messages.append({"role": "user", "content": user_input})
-        with st.chat_message("user"):
-            st.markdown(user_input)
-
-        with st.chat_message("assistant"):
-            response = st.write_stream(_run_stream(user_input))
-
-        st.session_state.messages.append({"role": "assistant", "content": response})
-        _handle_hitl()
+        _handle_user_input(user_input)
 
 
 main()
