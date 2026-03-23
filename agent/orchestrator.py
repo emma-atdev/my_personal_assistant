@@ -5,10 +5,13 @@ from langchain_core.runnables import RunnableConfig
 from langgraph.checkpoint.memory import MemorySaver
 from langgraph.graph.state import CompiledStateGraph
 
+from agent.subagents.code import CODE_SUBAGENT
 from agent.subagents.cron import CRON_SUBAGENT
+from agent.subagents.github import GITHUB_SUBAGENT
 from agent.subagents.file import FILE_SUBAGENT
 from agent.subagents.note import NOTE_SUBAGENT
 from agent.subagents.research import RESEARCH_SUBAGENT
+from tools.changelog import append_changelog, read_changelog
 from tools.cost_tracker import get_cost_summary
 from tools.memory import delete_memory, get_memory, list_memories, save_memory
 from tools.notes import create_note, list_notes, search_notes
@@ -25,9 +28,11 @@ LLM 전문 AI 개발자의 개인 비서입니다.
 
 서브에이전트 활용 기준:
 - research: 웹 검색, AI 뉴스, 논문 탐색
-- note: 메모 저장/조회/수정
+- note: 메모 저장/조회/수정, Notion 페이지 검색·조회·생성, CHANGELOG 동기화
 - file: 로컬 파일 읽기 (MCP 필요)
 - cron: 브리핑 생성, 리포트 작성
+- code: Python 코드 작성·실행, 수학 계산, 데이터 분석 (Docker 샌드박스)
+- github: GitHub 이슈/PR 조회·생성·댓글, 할일 확인
 
 이름/페르소나:
 - 현재 이름: {assistant_name}
@@ -40,6 +45,12 @@ LLM 전문 AI 개발자의 개인 비서입니다.
 - save_memory/get_memory로 저장된 장기 기억을 참고할 때는 답변 끝에 `[장기 기억]` 표시
 - 둘 다 사용했다면 `[대화 기억 · 장기 기억]` 함께 표시
 - 기억을 전혀 참고하지 않은 일반 답변에는 표시하지 않음
+
+Changelog 기록 기준 (append_changelog 자동 호출):
+- 코드를 작성하거나 실행했을 때
+- 파일을 생성하거나 수정했을 때
+- 논문 브리핑, 주간 리포트 등 주요 작업을 완료했을 때
+- 사용자가 "changelog 보여줘" 하면 read_changelog 호출
 
 주의:
 - 불확실한 정보는 검색으로 확인 후 답변
@@ -97,8 +108,11 @@ def create_orchestrator(
             search_notes,
             # 비용
             get_cost_summary,
+            # 변경 이력
+            append_changelog,
+            read_changelog,
         ],
-        subagents=[RESEARCH_SUBAGENT, NOTE_SUBAGENT, FILE_SUBAGENT, CRON_SUBAGENT],  # type: ignore[list-item]
+        subagents=[RESEARCH_SUBAGENT, NOTE_SUBAGENT, FILE_SUBAGENT, CRON_SUBAGENT, CODE_SUBAGENT, GITHUB_SUBAGENT],  # type: ignore[list-item]
         system_prompt=system_prompt,
         checkpointer=checkpointer,
         interrupt_on=HITL_TOOLS,  # type: ignore[arg-type]

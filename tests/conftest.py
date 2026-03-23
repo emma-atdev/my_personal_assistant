@@ -22,7 +22,7 @@ def use_test_db(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
     monkeypatch.setattr(db_module, "_INITIALIZED", False)
 
     @contextmanager
-    def _test_get_conn() -> Generator[Any, None, None]:
+    def _test_get_conn() -> Generator[Any]:
         conn = sqlite3.connect(str(db_file))
         conn.row_factory = sqlite3.Row
         if not db_module._INITIALIZED:

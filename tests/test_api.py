@@ -1,6 +1,5 @@
 """backend/app.py FastAPI 엔드포인트 테스트."""
 
-import pytest
 from fastapi.testclient import TestClient
 
 from backend.app import app

@@ -1,0 +1,46 @@
+"""GitHub 서브에이전트 — Issues, PRs, 레포 관리 전담."""
+
+from langchain.chat_models import init_chat_model
+
+from tools.github_tools import (
+    comment_on_issue,
+    create_issue,
+    get_issue,
+    list_my_issues,
+    list_my_prs,
+    list_repo_issues,
+)
+
+GITHUB_SUBAGENT: dict[str, object] = {
+    "name": "github",
+    "description": (
+        "GitHub 관련 작업이 필요할 때 사용. "
+        "담당 이슈 조회, PR 목록, 이슈 생성·댓글, 레포 이슈 탐색 담당. "
+        "할일 목록 확인 시에도 활용."
+    ),
+    "system_prompt": (
+        "당신은 GitHub 전문 에이전트입니다.\n"
+        "사용자의 GitHub 이슈와 PR을 조회하고 관리합니다.\n\n"
+        "활용 기준:\n"
+        "- '내 이슈', '할일' → list_my_issues\n"
+        "- '내 PR', '리뷰 대기' → list_my_prs\n"
+        "- 특정 레포 이슈 → list_repo_issues\n"
+        "- 이슈 상세 → get_issue\n"
+        "- 이슈 생성 → create_issue (HITL 필요)\n"
+        "- 댓글 작성 → comment_on_issue (HITL 필요)\n\n"
+        "결과는 한국어로 요약해서 전달하세요."
+    ),
+    "tools": [
+        list_my_issues,
+        list_my_prs,
+        get_issue,
+        list_repo_issues,
+        create_issue,
+        comment_on_issue,
+    ],
+    "model": init_chat_model("openai:gpt-4o-mini"),
+    "interrupt_on": {
+        "create_issue": True,
+        "comment_on_issue": True,
+    },
+}
