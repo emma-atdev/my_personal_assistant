@@ -67,6 +67,8 @@ HITL_TOOLS: dict[str, bool] = {
     "edit_file": True,
     "write_file": True,
     "execute": True,
+    "create_event": True,
+    "create_notion_page": True,
 }
 
 

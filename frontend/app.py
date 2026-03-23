@@ -4,7 +4,7 @@ import asyncio
 import queue
 import threading
 from collections.abc import AsyncGenerator, Generator
-from datetime import datetime
+from datetime import date, datetime
 from typing import Any
 
 import streamlit as st
@@ -85,6 +85,8 @@ def _init_session() -> None:
         st.session_state.quick_input = ""
     if "total_tokens" not in st.session_state:
         st.session_state.total_tokens = {"input": 0, "output": 0}
+    if "briefing_read" not in st.session_state:
+        st.session_state.briefing_read = False
 
 
 # ── 이벤트 스트리밍 ───────────────────────────────────────────
@@ -320,6 +322,29 @@ def main() -> None:
             st.caption(f"세션 토큰  ↑ {total_in:,} · ↓ {total_out:,}")
 
         st.divider()
+
+        # ── 브리핑 알림 ──────────────────────────────────────────
+        if not st.session_state.briefing_read:
+            from tools.notes import list_notes_raw
+
+            today_str = date.today().strftime("%Y-%m-%d")
+            recent = list_notes_raw(limit=10)
+            today_briefing = next(
+                (n for n in recent if "브리핑" in (n.get("tags") or "") and today_str in str(n.get("created_at", ""))),
+                None,
+            )
+            if today_briefing:
+                st.info(f"📬 오늘 브리핑이 도착했어요!\n\n**{today_briefing['title']}**")
+                col1, col2 = st.columns(2)
+                with col1:
+                    if st.button("📖 보기", use_container_width=True):
+                        st.session_state.briefing_read = True
+                        st.session_state.quick_input = "오늘 브리핑 보여줘"
+                with col2:
+                    if st.button("✕ 닫기", use_container_width=True):
+                        st.session_state.briefing_read = True
+                        st.rerun()
+                st.divider()
 
         st.markdown("**⚡ 빠른 실행**")
         for label, query in _QUICK_ACTIONS:
