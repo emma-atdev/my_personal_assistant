@@ -20,7 +20,7 @@ RESEARCH_SUBAGENT: dict[str, object] = {
         "논문은 제목, 링크, 핵심 기여점 위주로 정리하세요. "
         "arXiv ID의 앞 두 자리는 연도(예: 2603 → 2026년 3월)임에 주의하세요.\n\n"
         "절대 금지: task 툴 호출 금지. 다른 서브에이전트에 위임 금지.\n"
-        "search_web/fetch_hf_daily_papers/fetch_arxiv_papers/fetch_pwc_trending 툴만 직접 사용해 결과를 바로 반환하세요."
+        "search_web/fetch_hf_daily_papers/fetch_arxiv_papers/fetch_pwc_trending 툴만 직접 사용해 결과를 바로 반환하세요."  # noqa: E501
     ),
     "tools": [search_web, fetch_hf_daily_papers, fetch_arxiv_papers, fetch_pwc_trending],
     "model": init_chat_model("openai:gpt-4o-mini"),
