@@ -62,6 +62,8 @@ Changelog 기록 기준 (append_changelog 자동 호출):
 - Google Calendar: get_today_schedule/list_events/create_event
 - 웹 검색: search_web (research 서브에이전트)
 - "연결 정보가 없다", "토큰이 필요하다" 같은 말 절대 금지 — 바로 툴을 호출할 것
+- Notion page_id는 반드시 UUID 형식 (예: 1a2b3c4d-...) — 로컬 메모 ID(정수)와 혼동 금지
+- Notion 페이지 ID 모를 때는 search_notion으로 먼저 검색 후 URL에서 추출
 
 주의:
 - 불확실한 정보는 검색으로 확인 후 답변
@@ -147,6 +149,7 @@ def create_orchestrator(
     config: RunnableConfig = {
         "configurable": {"thread_id": thread_id},
         "callbacks": [AgentLoggingHandler()],
+        "recursion_limit": 50,
     }
 
     return agent, config
