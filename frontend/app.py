@@ -1,7 +1,6 @@
 """Streamlit 채팅 UI — 개인 비서 프론트엔드."""
 
 import asyncio
-import json
 import queue
 import threading
 from collections.abc import AsyncGenerator, Generator
@@ -239,21 +238,14 @@ def _extract_text(messages: list[object]) -> str:
 
 def _copy_button(text: str, key: str) -> None:
     """클립보드 복사 버튼을 렌더링한다."""
-    # JSON으로 이스케이프해 JS 인젝션 방지
-    json_text = json.dumps(text)
-    html = f"""
-    <button
-        onclick="navigator.clipboard.writeText({json_text}).then(()=>{{
-            this.innerText='✅ 복사됨';
-            setTimeout(()=>this.innerText='📋 복사',1500);
-        }})"
-        style="border:1px solid #ddd;background:transparent;cursor:pointer;
-               color:#888;font-size:11px;padding:2px 8px;border-radius:4px;
-               margin-top:4px;"
-        id="copy-{key}"
-    >📋 복사</button>
-    """
-    st.components.v1.html(html, height=32)
+    escaped = text.replace("\\", "\\\\").replace("`", "\\`")
+    st.markdown(
+        f'<button onclick="navigator.clipboard.writeText(`{escaped}`)" '
+        'style="border:1px solid #ddd;background:transparent;cursor:pointer;'
+        'color:#888;font-size:11px;padding:2px 8px;border-radius:4px;margin-top:4px;"'
+        f' id="copy-{key}">📋 복사</button>',
+        unsafe_allow_html=True,
+    )
 
 
 # ── 사용자 입력 처리 ──────────────────────────────────────────
@@ -266,7 +258,7 @@ def _handle_user_input(user_input: str) -> None:
         st.markdown(user_input)
 
     with st.chat_message("assistant"):
-        status_box = st.empty()
+        status = st.status("생각 중...", expanded=False)
         text_box = st.empty()
 
         full_response = ""
@@ -277,15 +269,15 @@ def _handle_user_input(user_input: str) -> None:
                 full_response += ev["text"]
                 text_box.markdown(full_response + "▌")
             elif ev["type"] == "tool_start":
-                status_box.info(_tool_label(ev["name"]))
+                status.update(label=_tool_label(ev["name"]), state="running", expanded=False)
             elif ev["type"] == "tool_end":
-                status_box.empty()
+                status.update(label="생각 중...", state="running", expanded=False)
             elif ev["type"] == "usage":
                 session_tokens["input"] += ev["input_tokens"]
                 session_tokens["output"] += ev["output_tokens"]
 
+        status.update(label="완료", state="complete", expanded=False)
         text_box.markdown(full_response)
-        status_box.empty()
 
         # 이번 응답 토큰 표시
         total = session_tokens["input"] + session_tokens["output"]
