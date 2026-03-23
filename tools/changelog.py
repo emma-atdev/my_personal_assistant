@@ -61,6 +61,15 @@ def append_changelog(summary: str, files: str | None = None) -> str:
                 content = content[:header_end] + new_section + content[header_end:]
 
     CHANGELOG_PATH.write_text(content, encoding="utf-8")
+
+    # Notion 자동 동기화 (NOTION_CHANGELOG_PAGE_ID 설정 시)
+    try:
+        from tools.notion_tools import sync_changelog_to_notion
+
+        sync_changelog_to_notion()
+    except Exception:  # noqa: BLE001
+        pass  # Notion 미설정 시 무시
+
     return f"CHANGELOG.md에 기록 완료: {summary}"
 
 
