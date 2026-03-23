@@ -7,8 +7,8 @@ from langgraph.graph.state import CompiledStateGraph
 
 from agent.subagents.code import CODE_SUBAGENT
 from agent.subagents.cron import CRON_SUBAGENT
-from agent.subagents.github import GITHUB_SUBAGENT
 from agent.subagents.file import FILE_SUBAGENT
+from agent.subagents.github import GITHUB_SUBAGENT
 from agent.subagents.note import NOTE_SUBAGENT
 from agent.subagents.research import RESEARCH_SUBAGENT
 from tools.changelog import append_changelog, read_changelog
