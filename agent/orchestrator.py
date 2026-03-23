@@ -98,6 +98,7 @@ def create_orchestrator(
         assistant_name = "아직 이름이 없습니다. 첫 대화에서 사용자에게 이름을 지어달라고 요청하세요."
 
     from datetime import date
+
     system_prompt = _SYSTEM_PROMPT_TEMPLATE.format(
         assistant_name=assistant_name,
         today=date.today().strftime("%Y년 %m월 %d일"),

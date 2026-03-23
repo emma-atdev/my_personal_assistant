@@ -250,7 +250,6 @@ def _extract_text(messages: list[object]) -> str:
     return ""
 
 
-
 # ── 사용자 입력 처리 ──────────────────────────────────────────
 
 
@@ -288,7 +287,6 @@ def _handle_user_input(user_input: str) -> None:
             st.caption(f"↑ {session_tokens['input']:,} · ↓ {session_tokens['output']:,} 토큰")
             st.session_state.total_tokens["input"] += session_tokens["input"]
             st.session_state.total_tokens["output"] += session_tokens["output"]
-
 
     st.session_state.messages.append({"role": "assistant", "content": full_response})
     _handle_hitl()
