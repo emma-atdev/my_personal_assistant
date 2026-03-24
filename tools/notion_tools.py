@@ -192,7 +192,9 @@ def sync_changelog_to_notion() -> str:
         lines = content.splitlines(keepends=True)
         body = "".join(lines[1:]).lstrip() if lines and lines[0].startswith("# ") else content
         _append_markdown(page_id, body)
-        return "CHANGELOG.md → Notion 동기화 완료"
+        page = _client().pages.retrieve(page_id=page_id)
+        url = page.get("url", "")  # type: ignore[union-attr]
+        return f"CHANGELOG.md → Notion 동기화 완료: {url}"
     except APIResponseError as e:
         return f"Notion API 오류: {e}"
 

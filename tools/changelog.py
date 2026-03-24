@@ -63,13 +63,17 @@ def append_changelog(summary: str, files: str | None = None) -> str:
     CHANGELOG_PATH.write_text(content, encoding="utf-8")
 
     # Notion 자동 동기화 (NOTION_CHANGELOG_PAGE_ID 설정 시)
+    notion_result = ""
     try:
         from tools.notion_tools import sync_changelog_to_notion
 
-        sync_changelog_to_notion()
+        notion_result = sync_changelog_to_notion()
     except Exception:  # noqa: BLE001
         pass  # Notion 미설정 시 무시
 
+    if notion_result and "https://" in notion_result:
+        url = next((p for p in notion_result.split() if p.startswith("https://")), "")
+        return f"CHANGELOG.md에 기록 완료: {summary}\nNotion: {url}"
     return f"CHANGELOG.md에 기록 완료: {summary}"
 
 

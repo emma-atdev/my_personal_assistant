@@ -1,6 +1,7 @@
 # Changelog
 
 ## 2026-03-24
+- CHANGELOG.md 내용을 Notion에 동기화 수행
 - research 서브에이전트로 2026-03-24 기준 최신 AI 논문 10편 브리핑(제목/요약/중요성/한계/실무 아이디어)과 주간 트렌드·키워드 목록 생성
 - CHANGELOG.md를 Notion에 동기화(sync_changelog_to_notion) 수행
 
