@@ -334,20 +334,28 @@ def main() -> None:
                 None,
             )
             if today_briefing:
-                with st.expander(f"📬 {today_briefing['title']}", expanded=False):
-                    from tools.notes import get_note
+                # 메모 content에서 Notion URL 추출 (---\nNotion: <url> 형식)
+                from tools.notes import get_note
 
-                    note = get_note(today_briefing["id"])
-                    # 메타데이터 헤더 제거 후 본문만 표시
-                    lines = note.splitlines()
-                    body_start = next(
-                        (i for i, line in enumerate(lines) if line.startswith("작성:") or line.startswith("태그:")), 0
-                    )
-                    body = "\n".join(lines[body_start + 1 :]).strip()
-                    st.markdown(body)
-                    if st.button("✕ 읽음", use_container_width=True):
-                        st.session_state.briefing_read = True
-                        st.rerun()
+                note_raw = get_note(today_briefing["id"])
+                notion_url = ""
+                if "\n---\nNotion: " in note_raw:
+                    notion_url = note_raw.rsplit("\n---\nNotion: ", 1)[1].strip()
+                title = today_briefing["title"]
+
+                with st.container(border=True):
+                    st.caption("오늘의 브리핑")
+                    st.markdown(f"📬 **{title}**")
+                    _c1, _c2 = st.columns([3, 2])
+                    with _c1:
+                        if notion_url:
+                            st.link_button("📖 Notion 열기", notion_url, use_container_width=True, type="primary")
+                        else:
+                            st.button("📖 Notion 열기", use_container_width=True, disabled=True)
+                    with _c2:
+                        if st.button("✓ 읽음", use_container_width=True):
+                            st.session_state.briefing_read = True
+                            st.rerun()
                 st.divider()
 
         st.markdown("**⚡ 빠른 실행**")
