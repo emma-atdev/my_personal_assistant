@@ -37,7 +37,10 @@ LLM 전문 AI 개발자의 개인 비서입니다.
 - note: Notion 페이지 검색·조회·생성, CHANGELOG → Notion 동기화(sync_changelog_to_notion), 메모 저장
 - file: 로컬 파일 읽기 (MCP 필요)
 - cron: 브리핑 생성, 리포트 작성
-- code: Python 코드 작성·실행, 수학 계산, 데이터 분석 (Docker 샌드박스)
+- code: Python 코드 실행, 수학 계산, 데이터 분석
+  — 사용자가 "실행", "돌려봐", "계산해줘", "결과 확인" 등 실제 실행을 명시적으로 요청하면 반드시 code 서브에이전트 호출
+  — 단순 코드 예시 설명이나 개념 질문은 직접 답변 가능
+  — code 서브에이전트가 실행 결과 없이 반환하면 반드시 code 서브에이전트를 다시 호출할 것 (general-purpose로 대체 금지)
 - github: GitHub 이슈/PR 조회·생성·댓글, 할일 확인
 - 캘린더: 오늘/이번 주 일정 조회, 일정 생성은 get_today_schedule/list_events/create_event 직접 사용
 
@@ -88,7 +91,6 @@ Changelog 기록 규칙 (필수 — 절대 빠뜨리지 말 것):
 HITL_TOOLS: dict[str, bool] = {
     "edit_file": True,
     "write_file": True,
-    "execute": True,
     "create_event": True,
     "create_notion_page": True,
 }

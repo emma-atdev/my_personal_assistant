@@ -1,8 +1,27 @@
 """파일 서브에이전트 — 로컬 MCP 서버를 통한 파일 접근 전담."""
 
+from pathlib import Path
+
+import yaml
 from langchain.chat_models import init_chat_model
 
 from tools.local_file import list_local_files, read_local_file
+
+_CONFIG_PATH = Path(__file__).parent.parent.parent / "mcp_server" / "config.yaml"
+
+
+def _allowed_dirs_str() -> str:
+    """config.yaml에서 허용 디렉토리 목록을 읽어 문자열로 반환한다."""
+    try:
+        config = yaml.safe_load(_CONFIG_PATH.read_text(encoding="utf-8"))
+        entries = config.get("allowed_directories", [])
+        paths = [e["path"] for e in entries if isinstance(e, dict) and "path" in e]
+        return ", ".join(paths) if paths else "~/my_personal_assistant"
+    except Exception:  # noqa: BLE001
+        return "~/my_personal_assistant"
+
+
+_allowed = _allowed_dirs_str()
 
 FILE_SUBAGENT: dict[str, object] = {
     "name": "file",
@@ -12,11 +31,11 @@ FILE_SUBAGENT: dict[str, object] = {
         "MCP 서버가 실행 중일 때만 동작."
     ),
     "system_prompt": (
-        "당신은 파일 분석 전문가입니다. "
-        "허용된 디렉토리 내 파일을 읽고 분석합니다. "
-        "코드 파일은 구조와 핵심 로직을 요약하고, "
-        "문서 파일은 핵심 내용을 추출해 정리하세요. "
-        "허용되지 않은 경로 접근 시 명확히 안내하세요."
+        "당신은 파일 분석 전문가입니다.\n"
+        f"접근 가능한 경로: {_allowed}\n"
+        "위 경로 외(/, /home, /workspace, /root 등)는 허용되지 않습니다.\n"
+        "경로를 모를 때는 list_local_files로 허용 경로 최상위부터 탐색하세요.\n"
+        "코드 파일은 구조와 핵심 로직을 요약하고, 문서 파일은 핵심 내용을 추출해 정리하세요."
     ),
     "tools": [read_local_file, list_local_files],
     "model": init_chat_model("openai:gpt-4o-mini"),

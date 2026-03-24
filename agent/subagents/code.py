@@ -1,42 +1,101 @@
 """코드 실행 서브에이전트 — Modal Sandbox 백엔드 사용."""
 
+import warnings
+from typing import Any
+
 from deepagents import create_deep_agent
 from deepagents.middleware.subagents import CompiledSubAgent
 from langchain.chat_models import init_chat_model
 
 _CODE_SYSTEM_PROMPT = (
-    "당신은 Python 전문 코드 실행 에이전트입니다.\n"
-    "Modal 클라우드 샌드박스 안에서 격리된 환경으로 코드를 실행합니다.\n\n"
-    "작업 방식:\n"
-    "1. write()로 /root/script.py 파일에 코드 작성\n"
+    "당신은 Python 코드 실행 에이전트입니다. 반드시 한국어로 답변하세요.\n"
+    "반드시 아래 순서를 지켜야 합니다. 절대 머릿속으로 계산하거나 추측하지 마세요.\n\n"
+    "필수 실행 순서 (예외 없음):\n"
+    "1. /root/script.py에 Python 코드 작성\n"
+    "   - 파일이 없으면 write_file로 생성\n"
+    "   - 파일이 이미 존재하면 반드시 edit_file로 전체 내용을 교체 (write_file 금지)\n"
     "2. execute()로 실행: `python /root/script.py`\n"
-    "3. 필요하면 패키지 설치 후 실행: `pip install -q numpy && python /root/script.py`\n\n"
+    "3. 필요하면 패키지 설치 후 실행: `pip install -q numpy && python /root/script.py`\n"
+    "4. execute() 결과를 그대로 사용자에게 전달\n\n"
+    "금지 사항:\n"
+    "- 코드를 실행하지 않고 답을 직접 작성하는 것\n"
+    "- /root/script.py 이외의 경로에 스크립트 파일을 만드는 것\n"
+    "- execute() 없이 작업을 완료하는 것\n"
+    "- shell script(.sh) 파일 생성\n"
+    "- task 툴로 다른 에이전트에 실행을 위임하는 것 — 반드시 execute()를 직접 호출\n\n"
     "주의사항:\n"
     "- 호스트 파일, 환경변수, API 키에 접근할 수 없습니다\n"
-    "- 코드 실행 결과를 그대로 전달하고 간략히 해석해 주세요"
+    "- 실행 결과를 그대로 전달하고 간략히 해석해 주세요"
 )
 
 _MODAL_APP_NAME = "personal-assistant-sandbox"
 
 
+def _make_sandbox_factory() -> Any:
+    """샌드박스 팩토리 클로저 — 만료 시 자동 재생성."""
+    _sandbox: Any = None
+    _backend: Any = None
+
+    def _is_alive() -> bool:
+        if _sandbox is None:
+            return False
+        try:
+            with warnings.catch_warnings():
+                warnings.simplefilter("ignore")
+                return _sandbox.poll() is None
+        except Exception:  # noqa: BLE001
+            return False
+
+    def factory(runtime: Any) -> Any:
+        nonlocal _sandbox, _backend
+        if not _is_alive():
+            import asyncio
+            import threading
+
+            import modal
+            from langchain_modal import ModalSandbox
+
+            async def _create() -> Any:
+                app = await modal.App.lookup.aio(_MODAL_APP_NAME, create_if_missing=True)
+                return await modal.Sandbox.create.aio(app=app, timeout=300)
+
+            result: list[Any] = []
+            error: list[BaseException] = []
+
+            def _run() -> None:
+                loop = asyncio.new_event_loop()
+                try:
+                    result.append(loop.run_until_complete(_create()))
+                except BaseException as e:  # noqa: BLE001
+                    error.append(e)
+                finally:
+                    loop.close()
+
+            t = threading.Thread(target=_run, daemon=True)
+            t.start()
+            t.join(timeout=60)
+
+            if error:
+                raise error[0]
+            _sandbox = result[0]
+            _backend = ModalSandbox(sandbox=_sandbox)
+
+        return _backend
+
+    return factory
+
+
 def _make_code_subagent() -> CompiledSubAgent:
     """Modal Sandbox 백엔드를 가진 코드 실행 서브에이전트를 생성한다."""
     try:
-        import modal
-        from langchain_modal import ModalSandbox
-
-        app = modal.App.lookup(_MODAL_APP_NAME, create_if_missing=True)
-        sandbox = modal.Sandbox.create(app=app, timeout=300)
-        backend: ModalSandbox | None = ModalSandbox(sandbox=sandbox)
+        backend: Any = _make_sandbox_factory()
     except Exception:  # noqa: BLE001
-        # Modal 미설정 또는 미설치 시 backend 없이 진행
         backend = None
 
     agent = create_deep_agent(
-        model=init_chat_model("openai:gpt-4o-mini"),
+        model=init_chat_model("openai:gpt-4o"),
         system_prompt=_CODE_SYSTEM_PROMPT,
         backend=backend,
-        interrupt_on={"execute": True},
         name="code-executor",
     )
 
