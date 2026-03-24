@@ -14,80 +14,133 @@ from langchain_core.messages import AIMessage, HumanMessage
 
 load_dotenv()  # .env 로드 후 에이전트 임포트
 
-from agent.orchestrator import create_orchestrator  # noqa: E402
+from agent.orchestrator import create_orchestrator, get_backend_loop  # noqa: E402
 
 st.set_page_config(page_title="개인 비서", page_icon="🤖", layout="wide")
 
 # ── 상수 ─────────────────────────────────────────────────────
 
 _QUICK_ACTIONS = [
-    ("📅 오늘 일정", "오늘 일정 알려줘"),
-    ("🗓️ 이번 주 일정", "이번 주 일정 알려줘"),
-    ("🐙 내 이슈", "내 GitHub 이슈 목록 알려줘"),
-    ("🔀 내 PR", "내 GitHub PR 목록 알려줘"),
-    ("📄 논문 브리핑", "최신 AI 논문 브리핑해줘"),
-    ("📝 Changelog", "changelog 보여줘"),
-    ("💰 API 비용", "이번 달 API 비용 알려줘"),
+    ("오늘 일정", "오늘 일정 알려줘"),
+    ("이번 주 일정", "이번 주 일정 알려줘"),
+    ("논문 브리핑", "최신 AI 논문 브리핑해줘"),
+    ("Changelog", "changelog 보여줘"),
+    ("API 비용", "이번 달 API 비용 알려줘"),
 ]
 
 _TOOL_LABELS: dict[str, str] = {
-    "task": "🤖 서브에이전트 실행 중",
-    "tavily_search_results_json": "🔍 웹 검색 중",
-    "search_web": "🔍 웹 검색 중",
-    "fetch_arxiv_papers": "📚 논문 검색 중",
-    "fetch_hf_daily_papers": "📚 논문 검색 중",
-    "fetch_pwc_trending": "📚 논문 트렌드 조회 중",
-    "search_notes": "📝 메모 검색 중",
-    "create_note": "📝 메모 저장 중",
-    "list_notes": "📝 메모 목록 조회 중",
-    "save_memory": "💾 기억 저장 중",
-    "get_memory": "🧠 기억 조회 중",
-    "list_memories": "🧠 기억 목록 조회 중",
-    "delete_memory": "🧠 기억 삭제 중",
-    "list_events": "📅 일정 조회 중",
-    "create_event": "📅 일정 생성 중",
-    "get_today_schedule": "📅 오늘 일정 조회 중",
-    "get_cost_summary": "💰 비용 확인 중",
-    "append_changelog": "📝 Changelog 기록 중",
-    "read_changelog": "📝 Changelog 조회 중",
-    "list_my_issues": "🐙 이슈 조회 중",
-    "list_my_prs": "🔀 PR 조회 중",
-    "get_issue": "🐙 이슈 상세 조회 중",
-    "create_issue": "🐙 이슈 생성 중",
-    "comment_on_issue": "💬 댓글 작성 중",
-    "list_repo_issues": "🐙 레포 이슈 조회 중",
-    "search_notion": "📓 Notion 검색 중",
-    "get_notion_page": "📓 Notion 페이지 조회 중",
-    "create_notion_page": "📓 Notion 페이지 생성 중",
-    "append_notion_block": "📓 Notion 내용 추가 중",
-    "sync_changelog_to_notion": "📓 Notion 동기화 중",
-    "execute": "⚙️ 코드 실행 중",
-    "write_file": "📁 파일 작성 중",
-    "edit_file": "📁 파일 수정 중",
-    "read_file": "📁 파일 읽는 중",
+    "task": "서브에이전트에서 작업 중입니다.",
+    "tavily_search_results_json": "웹에서 정보를 검색 중입니다.",
+    "search_web": "웹에서 정보를 검색 중입니다.",
+    "fetch_arxiv_papers": "ArXiv에서 논문을 검색 중입니다.",
+    "fetch_hf_daily_papers": "HuggingFace에서 논문을 가져오는 중입니다.",
+    "fetch_pwc_trending": "Papers with Code에서 트렌드를 조회 중입니다.",
+    "search_notes": "메모를 검색 중입니다.",
+    "create_note": "메모를 저장 중입니다.",
+    "list_notes": "메모 목록을 불러오는 중입니다.",
+    "save_memory": "기억을 저장 중입니다.",
+    "get_memory": "기억을 조회 중입니다.",
+    "list_memories": "기억 목록을 불러오는 중입니다.",
+    "delete_memory": "기억을 삭제 중입니다.",
+    "list_events": "Google Calendar에서 일정을 조회 중입니다.",
+    "create_event": "Google Calendar에 일정을 생성 중입니다.",
+    "get_today_schedule": "오늘 일정을 확인 중입니다.",
+    "get_cost_summary": "API 비용을 확인 중입니다.",
+    "append_changelog": "Changelog에 기록 중입니다.",
+    "read_changelog": "Changelog를 불러오는 중입니다.",
+    "list_my_issues": "GitHub에서 이슈 목록을 조회 중입니다.",
+    "list_my_prs": "GitHub에서 PR 목록을 조회 중입니다.",
+    "get_issue": "GitHub 이슈 내용을 확인 중입니다.",
+    "create_issue": "GitHub에 이슈를 생성 중입니다.",
+    "comment_on_issue": "GitHub 이슈에 댓글을 작성 중입니다.",
+    "list_repo_issues": "GitHub 레포 이슈를 조회 중입니다.",
+    "search_notion": "Notion에서 페이지를 검색 중입니다.",
+    "get_notion_page": "Notion 페이지를 불러오는 중입니다.",
+    "create_notion_page": "Notion에 페이지를 생성 중입니다.",
+    "append_notion_block": "Notion 페이지에 내용을 추가 중입니다.",
+    "sync_changelog_to_notion": "Notion에 Changelog를 동기화 중입니다.",
+    "execute": "코드를 실행 중입니다.",
+    "write_file": "파일을 작성 중입니다.",
+    "edit_file": "파일을 수정 중입니다.",
+    "read_file": "파일을 읽는 중입니다.",
 }
 
 
 def _tool_label(name: str) -> str:
-    return _TOOL_LABELS.get(name, f"🔧 {name} 실행 중")
+    return _TOOL_LABELS.get(name, f"{name} 실행 중입니다.")
 
 
 # ── 세션 초기화 ───────────────────────────────────────────────
 
 
+def _load_messages_from_state() -> list[dict[str, str]]:
+    """현재 thread의 LangGraph 상태에서 메시지를 복원한다."""
+    import asyncio
+
+    loop = get_backend_loop()
+    future = asyncio.run_coroutine_threadsafe(
+        st.session_state.agent.aget_state(st.session_state.config), loop
+    )
+    state = future.result(timeout=10)
+    messages = state.values.get("messages", [])
+
+    result = []
+    for m in messages:
+        if isinstance(m, HumanMessage):
+            result.append({"role": "user", "content": str(m.content)})
+        elif isinstance(m, AIMessage) and m.content:
+            content = m.content
+            if isinstance(content, list):
+                text = " ".join(b["text"] for b in content if isinstance(b, dict) and b.get("type") == "text")
+            else:
+                text = str(content)
+            if text:
+                result.append({"role": "assistant", "content": text})
+    return result
+
+
+def _switch_conversation(thread_id: str) -> None:
+    """thread_id로 대화를 전환하고 메시지를 복원한다."""
+    _, config = create_orchestrator(thread_id=thread_id)
+    st.session_state.config = config
+    st.session_state.thread_id = thread_id
+    st.session_state.messages = _load_messages_from_state()
+    st.session_state.total_tokens = {"input": 0, "output": 0}
+
+
 def _init_session() -> None:
+    from tools.conversations import create_conversation, list_conversations
+
     if "agent" not in st.session_state:
-        agent, config = create_orchestrator(thread_id="default")
+        agent, _ = create_orchestrator(thread_id="default")
         st.session_state.agent = agent
+
+    if "thread_id" not in st.session_state:
+        convs = list_conversations(limit=20)
+        # 제목이 있는 대화 우선, 없으면 '새 채팅' 사용, 없으면 생성
+        real = [c for c in convs if c["title"] != "새 채팅"]
+        if real:
+            thread_id = real[0]["thread_id"]
+        elif convs:
+            thread_id = convs[0]["thread_id"]
+        else:
+            thread_id = create_conversation("새 채팅")
+        st.session_state.thread_id = thread_id
+
+    if "config" not in st.session_state:
+        _, config = create_orchestrator(thread_id=st.session_state.thread_id)
         st.session_state.config = config
+
     if "messages" not in st.session_state:
-        st.session_state.messages = []
+        st.session_state.messages = _load_messages_from_state()
     if "quick_input" not in st.session_state:
         st.session_state.quick_input = ""
     if "total_tokens" not in st.session_state:
         st.session_state.total_tokens = {"input": 0, "output": 0}
     if "briefing_read" not in st.session_state:
         st.session_state.briefing_read = False
+    if "conv_renaming" not in st.session_state:
+        st.session_state.conv_renaming = None  # 이름 수정 중인 thread_id
 
 
 # ── 이벤트 스트리밍 ───────────────────────────────────────────
@@ -106,7 +159,7 @@ async def _stream_events(agent: Any, config: Any, user_input: str) -> AsyncGener
             metadata = event.get("metadata", {})
             ns = metadata.get("checkpoint_ns", "")
             if ns.startswith("tools:"):
-                yield {"type": "status", "label": "🤖 서브에이전트 분석 중..."}
+                yield {"type": "status", "label": "서브에이전트에서 분석 중입니다."}
             else:
                 yield {"type": "status", "label": "orchestrator_llm_start"}
 
@@ -155,23 +208,21 @@ def _run_events(user_input: str) -> Generator[dict[str, Any]]:
     agent = st.session_state.agent
     config = st.session_state.config
     event_queue: queue.Queue[dict[str, Any] | None] = queue.Queue()
+    loop = get_backend_loop()
 
     async def _producer() -> None:
+        import traceback
+
         try:
             async for ev in _stream_events(agent, config, user_input):
                 event_queue.put(ev)
-        except Exception:  # noqa: BLE001
-            pass
+        except Exception as e:  # noqa: BLE001
+            msg = traceback.format_exc() or f"{type(e).__name__}: {e!r}"
+            event_queue.put({"type": "error", "message": msg})
         finally:
             event_queue.put(None)
 
-    def _thread_target() -> None:
-        loop = asyncio.new_event_loop()
-        asyncio.set_event_loop(loop)
-        try:
-            loop.run_until_complete(_producer())
-        finally:
-            loop.close()
+    asyncio.run_coroutine_threadsafe(_producer(), loop)
 
     stop_tick = threading.Event()
 
@@ -180,9 +231,7 @@ def _run_events(user_input: str) -> Generator[dict[str, Any]]:
             time.sleep(0.5)
             event_queue.put({"type": "tick"})
 
-    thread = threading.Thread(target=_thread_target, daemon=True)
     tick_thread = threading.Thread(target=_ticker, daemon=True)
-    thread.start()
     tick_thread.start()
 
     while True:
@@ -192,10 +241,32 @@ def _run_events(user_input: str) -> Generator[dict[str, Any]]:
             break
         yield ev
 
-    thread.join()
-
 
 # ── HITL ─────────────────────────────────────────────────────
+
+
+@st.dialog("대화 초기화")
+def _confirm_reset_dialog() -> None:
+    st.warning("현재 대화가 완전히 삭제됩니다. 계속하시겠습니까?")
+    col1, col2 = st.columns(2)
+    with col1:
+        if st.button("삭제", use_container_width=True, type="primary"):
+            from tools.conversations import create_conversation, delete_conversation, list_conversations
+
+            delete_conversation(st.session_state.thread_id)
+            remaining = [c for c in list_conversations(limit=20) if c["title"] != "새 채팅"]
+            if remaining:
+                next_id = remaining[0]["thread_id"]
+            else:
+                next_id = create_conversation("새 채팅")
+            _switch_conversation(next_id)
+            st.session_state.total_tokens = {"input": 0, "output": 0}
+            st.session_state.pop("confirm_reset", None)
+            st.rerun()
+    with col2:
+        if st.button("취소", use_container_width=True):
+            st.session_state.pop("confirm_reset", None)
+            st.rerun()
 
 
 @st.dialog("확인이 필요합니다")
@@ -280,7 +351,7 @@ def _handle_user_input(user_input: str) -> None:
         st.markdown(user_input)
 
     with st.chat_message("assistant"):
-        status = st.status("🤔 요청 분석 중...", expanded=False)
+        status = st.status("요청을 분석 중입니다.", expanded=False)
         timer_box = st.empty()
         text_box = st.empty()
 
@@ -311,12 +382,15 @@ def _handle_user_input(user_input: str) -> None:
             timer_box.caption(f"⏱ {elapsed}초 경과")
             if ev["type"] == "tick":
                 continue
+            elif ev["type"] == "error":
+                st.error(f"오류: {ev['message']}")
+                break
             elif ev["type"] == "token":
                 full_response += ev["text"]
                 text_box.markdown(full_response + "▌")
             elif ev["type"] == "status":
                 if ev["label"] == "orchestrator_llm_start":
-                    label = "✍️ 답변 작성 중..." if tool_called else "🤔 요청 분석 중..."
+                    label = "답변을 작성 중입니다." if tool_called else "요청을 분석 중입니다."
                 else:
                     label = ev["label"]
                 status.update(label=label, state="running", expanded=False)
@@ -327,14 +401,14 @@ def _handle_user_input(user_input: str) -> None:
                 if name == "task":
                     subagent = ev.get("args", {}).get("subagent_type", "")
                     _subagent_labels = {
-                        "research": "🔍 research 서브에이전트 실행 중",
-                        "note": "📝 note 서브에이전트 실행 중",
-                        "github": "🐙 github 서브에이전트 실행 중",
-                        "code": "🐍 code 서브에이전트 실행 중",
-                        "file": "📁 file 서브에이전트 실행 중",
-                        "cron": "📬 cron 서브에이전트 실행 중",
+                        "research": "research 에이전트에서 검색 중입니다.",
+                        "note": "note 에이전트에서 메모를 처리 중입니다.",
+                        "github": "github 에이전트에서 작업 중입니다.",
+                        "code": "code 에이전트에서 코드를 실행 중입니다.",
+                        "file": "file 에이전트에서 파일을 읽는 중입니다.",
+                        "cron": "cron 에이전트에서 리포트를 생성 중입니다.",
                     }
-                    label = _subagent_labels.get(subagent, "🤖 서브에이전트 실행 중")
+                    label = _subagent_labels.get(subagent, "서브에이전트에서 작업 중입니다.")
                 else:
                     label = _tool_label(name)
                 status.update(label=label, state="running", expanded=False)
@@ -361,6 +435,19 @@ def _handle_user_input(user_input: str) -> None:
             st.session_state.total_tokens["output"] += session_tokens["output"]
 
     st.session_state.messages.append({"role": "assistant", "content": full_response})
+
+    # 첫 메시지면 대화 제목 자동 설정
+    if len(st.session_state.messages) == 2:  # user + assistant
+        from tools.conversations import update_conversation_title
+
+        title = user_input[:30] + ("..." if len(user_input) > 30 else "")
+        update_conversation_title(st.session_state.thread_id, title)
+
+    # 대화 updated_at 갱신
+    from tools.conversations import touch_conversation
+
+    touch_conversation(st.session_state.thread_id)
+
     _handle_hitl()
 
 
@@ -382,14 +469,150 @@ def _export_chat() -> str:
 def main() -> None:
     _init_session()
 
+    st.markdown(
+        """
+        <style>
+        *, *::before, *::after {
+            transition: none !important;
+            animation-duration: 0.001s !important;
+        }
+        [class*="st-key-conv_"] button,
+        div.current-conv > div > button {
+            background: transparent !important;
+            border: 1px solid transparent !important;
+            text-align: left !important;
+            justify-content: flex-start !important;
+            align-items: flex-start !important;
+            color: inherit !important;
+            box-shadow: none !important;
+            padding-left: 8px !important;
+        }
+        [class*="st-key-conv_"] button > div,
+        div.current-conv > div > button > div {
+            justify-content: flex-start !important;
+            text-align: left !important;
+            width: 100% !important;
+        }
+        [class*="st-key-conv_"] button:hover,
+        div.current-conv > div > button:hover {
+            background: rgba(150,150,150,0.1) !important;
+        }
+        div.current-conv > div > button {
+            font-weight: 700 !important;
+        }
+        [data-testid="stPopover"] > button {
+            padding: 2px 6px !important;
+            min-height: unset !important;
+            height: 28px !important;
+            font-size: 13px !important;
+        }
+        [data-testid="stPopoverButton"] div:has(> span > [data-testid="stIconMaterial"]) {
+            display: none !important;
+        }
+        [data-testid="stPopoverButton"] > div {
+            margin-right: 0 !important;
+            justify-content: center !important;
+        }
+        [data-testid="stPopoverBody"] {
+            min-width: unset !important;
+            width: fit-content !important;
+        }
+        [data-testid="stPopoverBody"] > div {
+            padding: 4px !important;
+        }
+        [data-testid="stPopoverBody"] [data-testid="stVerticalBlock"] {
+            gap: 2px !important;
+        }
+        [data-testid="stPopover"] [data-testid="stBaseButton-secondary"] {
+            padding: 2px 8px !important;
+            min-height: unset !important;
+            height: 26px !important;
+            font-size: 12px !important;
+        }
+        </style>
+        """,
+        unsafe_allow_html=True,
+    )
+
     with st.sidebar:
-        st.markdown("## 🤖 개인 비서")
-        st.caption("LLM 전문 AI 개발자를 위한 비서")
+        st.markdown("## 최정짱 비서")
+        st.caption(
+            "웹 검색 · 논문 탐색 · 메모 관리 · Notion · Google Calendar · GitHub · Python 코드 실행 · API 비용 확인"
+        )
 
         total_in = st.session_state.total_tokens["input"]
         total_out = st.session_state.total_tokens["output"]
         if total_in + total_out > 0:
             st.caption(f"세션 토큰  ↑ {total_in:,} · ↓ {total_out:,}")
+
+        st.divider()
+
+        # ── 대화 목록 ─────────────────────────────────────────────
+        from tools.conversations import create_conversation, list_conversations
+
+        has_messages = bool(st.session_state.messages)
+        if st.button("➕ 새 채팅", use_container_width=True, disabled=not has_messages):
+            new_id = create_conversation("새 채팅")
+            _switch_conversation(new_id)
+            st.session_state.conv_menu = None
+            st.rerun()
+
+        convs = list_conversations(limit=20)
+        _default_title = "새 채팅"
+        for conv in convs:
+            tid = conv["thread_id"]
+            title = conv["title"]
+            if title == _default_title:
+                continue
+            is_current = tid == st.session_state.thread_id
+
+            col_title, col_menu = st.columns([8, 1])
+            with col_title:
+                if is_current:
+                    st.markdown(
+                        f'<a style="font-weight:700;text-decoration:none;color:inherit;'
+                        f'display:block;padding:6px 8px;">{title}</a>',
+                        unsafe_allow_html=True,
+                    )
+                elif st.button(title, key=f"conv_{tid}", use_container_width=True):
+                    _switch_conversation(tid)
+                    st.rerun()
+
+            with col_menu:
+                with st.popover("⋮"):
+                    if st.button("이름 수정", key=f"rename_{tid}", use_container_width=True):
+                        st.session_state.conv_renaming = tid
+                        st.rerun()
+                    if st.button("삭제", key=f"delete_{tid}", use_container_width=True):
+                        from tools.conversations import delete_conversation
+
+                        delete_conversation(tid)
+                        if is_current:
+                            remaining = [c for c in convs if c["thread_id"] != tid]
+                            if remaining:
+                                _switch_conversation(remaining[0]["thread_id"])
+                            else:
+                                new_id = create_conversation("새 채팅")
+                                _switch_conversation(new_id)
+                        st.rerun()
+
+            # 이름 수정 인라인 폼
+            if st.session_state.conv_renaming == tid:
+                new_title = st.text_input(
+                    "새 이름", value=title, key=f"rename_input_{tid}", label_visibility="collapsed"
+                )
+                rc1, rc2 = st.columns(2)
+                with rc1:
+                    if st.button("확인", key=f"rename_ok_{tid}", use_container_width=True):
+                        from tools.conversations import update_conversation_title
+
+                        update_conversation_title(tid, new_title)
+                        st.session_state.conv_renaming = None
+                        st.rerun()
+                with rc2:
+                    if st.button("취소", key=f"rename_cancel_{tid}", use_container_width=True):
+                        st.session_state.conv_renaming = None
+                        st.rerun()
 
         st.divider()
 
@@ -434,27 +657,11 @@ def main() -> None:
                 st.session_state.quick_input = query
 
         st.divider()
-        st.markdown(
-            "**🛠️ 기능 목록**\n\n"
-            "🔍 웹 검색 · 최신 정보 조회\n\n"
-            "📚 ArXiv · HuggingFace 논문 탐색\n\n"
-            "🐙 GitHub 이슈/PR 조회 · 생성 · 댓글\n\n"
-            "📓 Notion 페이지 검색 · 조회 · 생성\n\n"
-            "📅 Google Calendar 일정 조회 · 생성\n\n"
-            "🐍 Python 코드 실행 (Modal 샌드박스)\n\n"
-            "📁 로컬 파일 분석 (MCP 연결 시)\n\n"
-            "💰 API 비용 확인\n\n"
-            "📝 Changelog 자동 기록"
-        )
-
-        st.divider()
 
         col1, col2 = st.columns(2)
         with col1:
             if st.button("🗑️ 초기화", use_container_width=True):
-                st.session_state.messages = []
-                st.session_state.total_tokens = {"input": 0, "output": 0}
-                st.rerun()
+                st.session_state.confirm_reset = True
         with col2:
             if st.session_state.messages:
                 st.download_button(
@@ -477,8 +684,12 @@ def main() -> None:
         _handle_user_input(user_input)
         st.rerun()
 
+    if st.session_state.get("confirm_reset"):
+        _confirm_reset_dialog()
+
     if user_input := st.chat_input("메시지를 입력하세요..."):
         _handle_user_input(user_input)
+        st.rerun()
 
 
 main()
