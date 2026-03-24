@@ -133,9 +133,11 @@ def create_notion_page(title: str, content: str, parent_page_id: str | None = No
         page_id = page["id"]  # type: ignore[index]
         url = page["url"]  # type: ignore[index]
 
-        # 본문 추가
+        # 본문 추가 (첫 줄이 제목과 같은 # 헤더면 스킵)
         if content:
-            _append_markdown(page_id, content)
+            lines = content.splitlines(keepends=True)
+            body = "".join(lines[1:]).lstrip() if lines and lines[0].strip() in (f"# {title}", "#") else content
+            _append_markdown(page_id, body)
 
         return f"페이지 생성 완료: {url}"
     except APIResponseError as e:
@@ -179,15 +181,28 @@ def sync_changelog_to_notion() -> str:
     try:
         content = CHANGELOG_PATH.read_text(encoding="utf-8")
 
-        # 기존 블록 삭제 후 새로 작성
+        # 페이지 제목 업데이트
+        _update_page_title(page_id, "Changelog")
+
+        # 기존 블록 삭제 후 새로 작성 (# Changelog 헤더 제외)
         blocks_resp = _client().blocks.children.list(block_id=page_id)
         for block in blocks_resp.get("results", []):  # type: ignore[union-attr]
             _client().blocks.delete(block_id=block["id"])
 
-        _append_markdown(page_id, content)
+        lines = content.splitlines(keepends=True)
+        body = "".join(lines[1:]).lstrip() if lines and lines[0].startswith("# ") else content
+        _append_markdown(page_id, body)
         return "CHANGELOG.md → Notion 동기화 완료"
     except APIResponseError as e:
         return f"Notion API 오류: {e}"
+
+
+def _update_page_title(page_id: str, title: str) -> None:
+    """Notion 페이지 제목을 업데이트한다."""
+    _client().pages.update(
+        page_id=page_id,
+        properties={"title": {"title": [{"type": "text", "text": {"content": title}}]}},
+    )
 
 
 def _append_markdown(page_id: str, markdown: str) -> None:

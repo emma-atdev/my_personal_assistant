@@ -1,5 +1,8 @@
 # Changelog
 
+## 2026-03-24
+- CHANGELOG.md를 Notion에 동기화(sync_changelog_to_notion) 수행
+
 ## 2026-03-23
 - 최신 AI 논문(최근 7~14일) 10편 브리핑 작성 및 메모 저장
 
