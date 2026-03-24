@@ -53,6 +53,14 @@ def _init_tables_pg(conn: Any) -> None:
                 cost_usd      NUMERIC(12, 6) NOT NULL
             )
         """)
+        cur.execute("""
+            CREATE TABLE IF NOT EXISTS conversations (
+                thread_id  TEXT PRIMARY KEY,
+                title      TEXT NOT NULL DEFAULT '새 대화',
+                created_at TIMESTAMP DEFAULT NOW(),
+                updated_at TIMESTAMP DEFAULT NOW()
+            )
+        """)
     conn.commit()
 
 
@@ -71,6 +79,14 @@ def _init_tables_sqlite(conn: sqlite3.Connection) -> None:
         CREATE TABLE IF NOT EXISTS memories (
             key        TEXT PRIMARY KEY,
             value      TEXT NOT NULL,
+            updated_at TEXT DEFAULT (datetime('now', 'localtime'))
+        )
+    """)
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS conversations (
+            thread_id  TEXT PRIMARY KEY,
+            title      TEXT NOT NULL DEFAULT '새 대화',
+            created_at TEXT DEFAULT (datetime('now', 'localtime')),
             updated_at TEXT DEFAULT (datetime('now', 'localtime'))
         )
     """)

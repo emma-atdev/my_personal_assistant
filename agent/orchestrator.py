@@ -1,5 +1,7 @@
 """메인 Orchestrator 에이전트 설정."""
 
+import os
+
 from deepagents import create_deep_agent
 from langchain_core.runnables import RunnableConfig
 from langgraph.checkpoint.memory import MemorySaver
@@ -93,6 +95,65 @@ HITL_TOOLS: dict[str, bool] = {
 }
 
 
+_checkpointer: MemorySaver | None = None
+_backend_loop: "asyncio.AbstractEventLoop | None" = None
+
+
+def get_backend_loop() -> "asyncio.AbstractEventLoop":
+    """앱 생애주기 동안 유지되는 단일 백그라운드 이벤트 루프를 반환한다."""
+    import asyncio
+    import threading
+
+    global _backend_loop
+    if _backend_loop is not None and _backend_loop.is_running():
+        return _backend_loop
+
+    _backend_loop = asyncio.new_event_loop()
+    loop = _backend_loop
+
+    def _run() -> None:
+        asyncio.set_event_loop(loop)
+        loop.run_forever()
+
+    t = threading.Thread(target=_run, daemon=True)
+    t.start()
+    return _backend_loop
+
+
+def _get_checkpointer() -> MemorySaver:
+    """체크포인터를 싱글턴으로 반환한다. DATABASE_URL 설정 시 AsyncPostgresSaver 사용."""
+    import asyncio
+
+    global _checkpointer
+    if _checkpointer is not None:
+        return _checkpointer
+
+    if os.getenv("DATABASE_URL"):
+        from langgraph.checkpoint.postgres.aio import AsyncPostgresSaver
+        from psycopg_pool import AsyncConnectionPool
+
+        loop = get_backend_loop()
+
+        async def _init() -> AsyncPostgresSaver:
+            pool = AsyncConnectionPool(
+                conninfo=os.environ["DATABASE_URL"],
+                max_size=10,
+                kwargs={"autocommit": True, "prepare_threshold": 0},
+                open=False,
+            )
+            await pool.open()
+            cp = AsyncPostgresSaver(pool)
+            await cp.setup()
+            return cp
+
+        future = asyncio.run_coroutine_threadsafe(_init(), loop)
+        _checkpointer = future.result(timeout=30)  # type: ignore[assignment]
+    else:
+        _checkpointer = MemorySaver()
+
+    return _checkpointer
+
+
 def _get_assistant_name() -> str:
     """DB에서 비서 이름을 조회한다. 없으면 빈 문자열을 반환한다."""
     from tools.memory import get_memory
@@ -126,7 +187,7 @@ def create_orchestrator(
         assistant_name=assistant_name,
         today=date.today().strftime("%Y년 %m월 %d일"),
     )
-    checkpointer = MemorySaver()
+    checkpointer = _get_checkpointer()
 
     agent: CompiledStateGraph = create_deep_agent(  # type: ignore[type-arg]
         model="openai:gpt-5.2",
