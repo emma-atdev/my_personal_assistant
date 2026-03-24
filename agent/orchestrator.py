@@ -15,7 +15,7 @@ from tools.calendar_tools import create_event, get_today_schedule, list_events
 from tools.changelog import append_changelog, read_changelog
 from tools.cost_tracker import get_cost_summary
 from tools.memory import delete_memory, get_memory, list_memories, save_memory
-from tools.notes import create_note, get_note, list_notes, search_notes
+from tools.notes import get_note, list_notes, search_notes
 from utils.logger import AgentLoggingHandler
 
 _SYSTEM_PROMPT_TEMPLATE = """
@@ -31,7 +31,8 @@ LLM 전문 AI 개발자의 개인 비서입니다.
 
 서브에이전트 활용 기준:
 - research: 웹 검색, AI 뉴스, 논문 탐색
-- note: 메모 저장/조회/수정, Notion 페이지 검색·조회·생성, CHANGELOG 동기화
+- note: 메모 생성·수정·삭제, Notion 페이지 검색·조회·생성, CHANGELOG → Notion 동기화(sync_changelog_to_notion)
+- 메모 단순 조회(get_note/list_notes/search_notes)는 직접 사용, 생성·수정·삭제는 반드시 note 서브에이전트 사용
 - file: 로컬 파일 읽기 (MCP 필요)
 - cron: 브리핑 생성, 리포트 작성
 - code: Python 코드 작성·실행, 수학 계산, 데이터 분석 (Docker 샌드박스)
@@ -128,8 +129,7 @@ def create_orchestrator(
             get_memory,
             list_memories,
             delete_memory,
-            # 노트 (빠른 조회용 — 상세 작업은 note 서브에이전트)
-            create_note,
+            # 노트 (빠른 조회용 — 생성/수정/삭제는 note 서브에이전트)
             get_note,
             list_notes,
             search_notes,
