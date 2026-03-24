@@ -1,8 +1,11 @@
 """frontend/app.py 단위 테스트 — Streamlit 세션 없이 순수 로직만 검증."""
 
 from datetime import datetime
+from pathlib import Path
 from typing import Any
 from unittest.mock import MagicMock, patch
+
+import pytest
 
 # ── _export_chat ─────────────────────────────────────────────
 
@@ -145,6 +148,10 @@ def test_is_allowed_blocks_outside_dir() -> None:
 # ── MCP list_local_files ignore 필터 ─────────────────────────
 
 
+@pytest.mark.skipif(
+    not Path("~/my_personal_assistant").expanduser().exists(),
+    reason="로컬 환경에서만 실행 (CI에 해당 경로 없음)",
+)
 def test_list_local_files_excludes_venv() -> None:
     """.venv 디렉토리가 목록에 포함되지 않는다."""
     from mcp_server.main import list_local_files
@@ -153,6 +160,10 @@ def test_list_local_files_excludes_venv() -> None:
     assert ".venv" not in result
 
 
+@pytest.mark.skipif(
+    not Path("~/my_personal_assistant").expanduser().exists(),
+    reason="로컬 환경에서만 실행 (CI에 해당 경로 없음)",
+)
 def test_list_local_files_excludes_git() -> None:
     """.git 디렉토리가 목록에 포함되지 않는다."""
     from mcp_server.main import list_local_files
@@ -161,6 +172,10 @@ def test_list_local_files_excludes_git() -> None:
     assert ".git/" not in result and "/.git" not in result
 
 
+@pytest.mark.skipif(
+    not Path("~/my_personal_assistant").expanduser().exists(),
+    reason="로컬 환경에서만 실행 (CI에 해당 경로 없음)",
+)
 def test_list_local_files_includes_source() -> None:
     """소스 코드 파일은 목록에 포함된다."""
     from mcp_server.main import list_local_files
