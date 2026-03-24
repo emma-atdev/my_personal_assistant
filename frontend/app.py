@@ -466,7 +466,7 @@ def _handle_user_input(user_input: str) -> None:
             st.session_state.total_tokens["input"] += session_tokens["input"]
             st.session_state.total_tokens["output"] += session_tokens["output"]
 
-    st.session_state.messages.append({"role": "assistant", "content": full_response})
+    st.session_state.messages.append({"role": "assistant", "content": full_response, "elapsed": elapsed})
 
     # 첫 메시지면 대화 제목 자동 설정
     if len(st.session_state.messages) == 2:  # user + assistant
@@ -723,6 +723,8 @@ def main() -> None:
     for i, msg in enumerate(st.session_state.messages):
         with st.chat_message(msg["role"]):
             st.markdown(msg["content"])
+            if msg["role"] == "assistant" and msg.get("elapsed"):
+                st.caption(f"완료 ({msg['elapsed']}초)")
 
     # 빠른 실행 버튼 쿼리 처리
     if st.session_state.quick_input:
