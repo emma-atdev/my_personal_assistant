@@ -16,6 +16,7 @@ def _client() -> Github:
     return Github(auth=Auth.Token(token))
 
 
+@lru_cache(maxsize=1)
 def _me() -> str:
     return _client().get_user().login
 
