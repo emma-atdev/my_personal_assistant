@@ -29,8 +29,12 @@ def fetch_hf_daily_papers(max_results: int = 5) -> str:
             summary = paper.get("summary", "")[:400]
             paper_id = paper.get("id", "")
             url = f"https://huggingface.co/papers/{paper_id}" if paper_id else ""
-            upvotes = p.get("numComments", 0)
-            output.append(f"**{title}**\n{url}\n댓글 {upvotes}개\n{summary}...")
+            upvotes = paper.get("upvotes", 0)
+            github_stars = paper.get("githubStars", 0)
+            stats = f"👍 {upvotes}"
+            if github_stars:
+                stats += f" · ⭐ {github_stars}"
+            output.append(f"**{title}**\n{url}\n{stats}\n{summary}...")
 
         return "\n\n---\n\n".join(output) if output else "논문을 가져올 수 없습니다."
     except httpx.HTTPError as e:
