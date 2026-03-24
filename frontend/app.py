@@ -319,14 +319,20 @@ def _hitl_dialog(tool_name: str, tool_args: dict[str, Any]) -> None:
 
 
 def _handle_hitl() -> None:
-    state = st.session_state.agent.get_state(st.session_state.config)
+    loop = get_backend_loop()
+    future = asyncio.run_coroutine_threadsafe(
+        st.session_state.agent.aget_state(st.session_state.config), loop
+    )
+    state = future.result(timeout=10)
     if not state.next:
+        st.session_state.pop("hitl_pending", None)
         return
 
-    # 마지막 AIMessage의 tool_calls에서 도구명·인수 추출
+    # 마지막 AIMessage의 tool_calls에서 도구명·인수·call_id 추출
     messages = state.values.get("messages", [])
     tool_name = "알 수 없는 작업"
     tool_args: dict[str, Any] = {}
+    tool_call_id: str = ""
     if messages:
         last_msg = messages[-1]
         tool_calls = getattr(last_msg, "tool_calls", [])
@@ -335,30 +341,84 @@ def _handle_hitl() -> None:
             if isinstance(tc, dict):
                 tool_name = tc.get("name", tool_name)
                 tool_args = tc.get("args", {})
+                tool_call_id = tc.get("id", "") or tc.get("call_id", "")
             else:
                 tool_name = getattr(tc, "name", tool_name)
                 tool_args = getattr(tc, "args", {})
+                tool_call_id = getattr(tc, "id", "")
 
     if "hitl_confirmed" not in st.session_state:
+        st.session_state.hitl_pending = True
+        st.session_state.hitl_tool_name = tool_name
+        st.session_state.hitl_tool_args = tool_args
+        st.session_state.hitl_tool_call_id = tool_call_id
         _hitl_dialog(tool_name, tool_args)
         return
 
     confirmed = st.session_state.pop("hitl_confirmed")
-
-    def _run_async(coro: Any) -> Any:
-        loop = asyncio.new_event_loop()
-        asyncio.set_event_loop(loop)
-        try:
-            return loop.run_until_complete(coro)
-        finally:
-            loop.close()
+    tool_name = st.session_state.pop("hitl_tool_name", tool_name)
+    tool_args = st.session_state.pop("hitl_tool_args", tool_args)
+    tool_call_id = st.session_state.pop("hitl_tool_call_id", tool_call_id)
+    st.session_state.pop("hitl_pending", None)
 
     if confirmed:
-        result = _run_async(st.session_state.agent.ainvoke(None, st.session_state.config))
-        response = _extract_text(result.get("messages", []))
-        st.session_state.messages.append({"role": "assistant", "content": response or "완료됐습니다."})
+        try:
+            from langchain_core.messages import ToolMessage
+
+            # 툴 직접 실행
+            _HITL_TOOL_MAP: dict[str, Any] = {
+                "create_event": lambda a: __import__(
+                    "tools.calendar_tools", fromlist=["create_event"]
+                ).create_event(**a),
+                "create_notion_page": lambda a: __import__(
+                    "tools.notion_tools", fromlist=["create_notion_page"]
+                ).create_notion_page(**a),
+            }
+            if tool_name in _HITL_TOOL_MAP:
+                tool_result = _HITL_TOOL_MAP[tool_name](tool_args)
+            else:
+                tool_result = f"{tool_name} 실행됨"
+
+            # ToolMessage 주입 후 에이전트 재개 (최종 응답 생성)
+            tool_msg = ToolMessage(content=str(tool_result), tool_call_id=tool_call_id)
+            update_future = asyncio.run_coroutine_threadsafe(
+                st.session_state.agent.aupdate_state(
+                    st.session_state.config, {"messages": [tool_msg]}
+                ),
+                loop,
+            )
+            update_future.result(timeout=10)
+
+            resume_future = asyncio.run_coroutine_threadsafe(
+                st.session_state.agent.ainvoke(None, st.session_state.config), loop
+            )
+            result = resume_future.result(timeout=60)
+            all_messages = result.get("messages", [])
+            response = _extract_text(all_messages)
+
+            # 캘린더 링크 보완
+            cal_link = ""
+            if "google.com/calendar" in tool_result:
+                for part in tool_result.split():
+                    if "google.com/calendar" in part:
+                        cal_link = part.strip("()")
+                        break
+            if cal_link and cal_link not in response:
+                response = f"{response}\n[📅 캘린더에서 보기]({cal_link})"
+
+            st.session_state.messages.append(
+                {"role": "assistant", "content": response or tool_result, "elapsed": 0, "steps": []}
+            )
+        except Exception:
+            import traceback
+            st.session_state.messages.append(
+                {"role": "assistant", "content": f"오류: {traceback.format_exc()}", "elapsed": 0, "steps": []}
+            )
     else:
-        st.session_state.messages.append({"role": "assistant", "content": "작업이 취소됐습니다."})
+        st.session_state.messages.append(
+            {"role": "assistant", "content": "작업이 취소됐습니다.", "elapsed": 0, "steps": []}
+        )
+    st.rerun()
 
 
 def _extract_text(messages: list[object]) -> str:
@@ -744,6 +804,9 @@ def main() -> None:
 
     if st.session_state.get("confirm_reset"):
         _confirm_reset_dialog()
+
+    if st.session_state.get("hitl_pending"):
+        _handle_hitl()
 
     if user_input := st.chat_input("메시지를 입력하세요..."):
         _handle_user_input(user_input)
