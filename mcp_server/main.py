@@ -18,19 +18,27 @@ def _load_config() -> dict[str, object]:
 
 
 def _is_allowed(path: str, access: str = "read") -> bool:
-    """경로가 허용 목록에 포함되는지 확인한다."""
+    """경로가 허용 목록에 포함되는지 확인한다. deny 패턴에 해당하면 차단."""
+    import fnmatch
+
     config = _load_config()
-    resolved = str(Path(path).expanduser().resolve())
+    resolved = Path(path).expanduser().resolve()
     allowed: list[object] = config.get("allowed_directories") or []  # type: ignore[assignment]
     for entry in allowed:
         if not isinstance(entry, dict):
             continue
-        allowed_path = str(Path(str(entry.get("path", ""))).expanduser().resolve())
-        if resolved.startswith(allowed_path):
-            if access == "read":
-                return True
-            if access == "write" and entry.get("access") == "read_write":
-                return True
+        allowed_path = Path(str(entry.get("path", ""))).expanduser().resolve()
+        if not str(resolved).startswith(str(allowed_path)):
+            continue
+        # deny 패턴 검사 — 파일명 기준
+        deny_patterns: list[str] = entry.get("deny") or []  # type: ignore[assignment]
+        filename = resolved.name
+        if any(fnmatch.fnmatch(filename, pattern) for pattern in deny_patterns):
+            return False
+        if access == "read":
+            return True
+        if access == "write" and entry.get("access") == "read_write":
+            return True
     return False
 
 

@@ -4,6 +4,13 @@
 allowed_directories:
   - path: "~/my_personal_assistant"
     access: "read"          # read | read_write
+    deny:                   # 민감 파일 차단 (glob 패턴)
+      - ".env"
+      - ".env.*"
+      - "*.key"
+      - "*.pem"
+      - "*.p12"
+      - "*.pfx"
 
 # 추후 필요에 따라 디렉토리 추가
 # - path: "~/papers"
