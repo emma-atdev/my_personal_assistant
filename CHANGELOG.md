@@ -1,6 +1,7 @@
 # Changelog
 
 ## 2026-03-24
+- Notion에 'HITL 테스트' 페이지 생성
 - code 서브에이전트로 소수 판별 함수 is_prime 작성 및 테스트(알려진 케이스/1~100 소수 목록) 실행
 - code 서브에이전트로 scikit-learn RandomForestClassifier를 iris 데이터셋에 학습/평가하여 정확도, 혼동행렬, 분류리포트 산출
 - code 서브에이전트로 처음 100,000개 소수 목록을 계산 실행(요약: 개수, 첫/마지막, 100000번째, 시간)

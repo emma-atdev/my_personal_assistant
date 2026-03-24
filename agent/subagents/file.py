@@ -3,7 +3,6 @@
 from langchain.chat_models import init_chat_model
 
 from tools.local_file import list_local_files, read_local_file
-
 from utils.mcp_config import allowed_dirs_str as _allowed_dirs_str
 
 _allowed = _allowed_dirs_str()

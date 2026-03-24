@@ -102,9 +102,7 @@ def list_local_files(directory: str = "~/projects") -> str:
     if not d.is_dir():
         return "디렉토리가 아닙니다."
     files = sorted(
-        str(f.relative_to(d))
-        for f in d.rglob("*")
-        if f.is_file() and not _is_ignored_path(f.relative_to(d), patterns)
+        str(f.relative_to(d)) for f in d.rglob("*") if f.is_file() and not _is_ignored_path(f.relative_to(d), patterns)
     )
     return "\n".join(files[:200]) if files else "파일이 없습니다."
 
