@@ -1,5 +1,6 @@
 """메인 Orchestrator 에이전트 설정."""
 
+import asyncio
 import os
 
 from deepagents import create_deep_agent
@@ -94,12 +95,11 @@ HITL_TOOLS: dict[str, bool] = {
 
 
 _checkpointer: MemorySaver | None = None
-_backend_loop: "asyncio.AbstractEventLoop | None" = None
+_backend_loop: asyncio.AbstractEventLoop | None = None
 
 
-def get_backend_loop() -> "asyncio.AbstractEventLoop":
+def get_backend_loop() -> asyncio.AbstractEventLoop:
     """앱 생애주기 동안 유지되는 단일 백그라운드 이벤트 루프를 반환한다."""
-    import asyncio
     import threading
 
     global _backend_loop
@@ -120,8 +120,6 @@ def get_backend_loop() -> "asyncio.AbstractEventLoop":
 
 def _get_checkpointer() -> MemorySaver:
     """체크포인터를 싱글턴으로 반환한다. DATABASE_URL 설정 시 AsyncPostgresSaver 사용."""
-    import asyncio
-
     global _checkpointer
     if _checkpointer is not None:
         return _checkpointer
@@ -140,7 +138,7 @@ def _get_checkpointer() -> MemorySaver:
                 open=False,
             )
             await pool.open()
-            cp = AsyncPostgresSaver(pool)
+            cp = AsyncPostgresSaver(pool)  # type: ignore[arg-type]
             await cp.setup()
             return cp
 
@@ -149,6 +147,7 @@ def _get_checkpointer() -> MemorySaver:
     else:
         _checkpointer = MemorySaver()
 
+    assert _checkpointer is not None
     return _checkpointer
 
 

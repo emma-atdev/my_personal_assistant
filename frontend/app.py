@@ -78,9 +78,7 @@ def _load_messages_from_state() -> list[dict[str, str]]:
     import asyncio
 
     loop = get_backend_loop()
-    future = asyncio.run_coroutine_threadsafe(
-        st.session_state.agent.aget_state(st.session_state.config), loop
-    )
+    future = asyncio.run_coroutine_threadsafe(st.session_state.agent.aget_state(st.session_state.config), loop)
     state = future.result(timeout=10)
     messages = state.values.get("messages", [])
 
@@ -139,23 +137,45 @@ def _init_session() -> None:
         st.session_state.total_tokens = {"input": 0, "output": 0}
     if "briefing_read" not in st.session_state:
         st.session_state.briefing_read = False
-    if "today_briefing" not in st.session_state:
-        # 오늘 브리핑 Notion 페이지를 세션당 한 번만 조회
+    if "weekly_report_read" not in st.session_state:
+        st.session_state.weekly_report_read = False
+
+    if "today_briefing" not in st.session_state or "this_week_report" not in st.session_state:
+        from datetime import timedelta
+
         from tools.notion_tools import search_notion
 
-        today_str = date.today().strftime("%Y-%m-%d")
-        try:
-            result = search_notion(f"아침 브리핑 {today_str}")
-            # 결과에서 오늘 브리핑 URL 추출
-            notion_url = ""
-            if "https://www.notion.so/" in result:
-                for part in result.split():
+        today = date.today()
+        today_str = today.strftime("%Y-%m-%d")
+        week_label = (today - timedelta(days=today.weekday())).strftime("%Y-%m-%d")
+
+        def _extract_notion_url(result: str, title: str | None = None) -> str | None:
+            """검색 결과에서 Notion URL을 추출한다. title 지정 시 해당 제목 항목의 URL만 반환."""
+            lines = result.split("\n")
+            if title:
+                for i, line in enumerate(lines):
+                    if title in line:
+                        for check in lines[i : i + 2]:
+                            for part in check.split():
+                                if part.startswith("https://www.notion.so/"):
+                                    return part.strip("()[]")
+            for line in lines:
+                for part in line.split():
                     if part.startswith("https://www.notion.so/"):
-                        notion_url = part.strip("()[]")
-                        break
-            st.session_state.today_briefing = notion_url or None
+                        return part.strip("()[]")
+            return None
+
+        briefing_title = f"아침 브리핑 {today_str}"
+        try:
+            st.session_state.today_briefing = _extract_notion_url(search_notion(briefing_title), briefing_title)
         except Exception:
             st.session_state.today_briefing = None
+
+        report_title = f"주간 리포트 {week_label}"
+        try:
+            st.session_state.this_week_report = _extract_notion_url(search_notion(report_title), report_title)
+        except Exception:
+            st.session_state.this_week_report = None
     if "conv_renaming" not in st.session_state:
         st.session_state.conv_renaming = None  # 이름 수정 중인 thread_id
 
@@ -633,17 +653,54 @@ def main() -> None:
 
         st.divider()
 
-        # ── 브리핑 알림 ──────────────────────────────────────────
+        # ── 브리핑 / 주간 리포트 알림 ────────────────────────────
+        has_notification = False
+
         if not st.session_state.briefing_read and st.session_state.today_briefing:
+            has_notification = True
             with st.container(border=True):
                 st.caption("오늘의 브리핑")
+                st.markdown(f"📬 **아침 브리핑 {date.today().strftime('%m월 %d일')}**")
                 _c1, _c2 = st.columns([3, 2])
                 with _c1:
-                    st.link_button("Notion 열기", st.session_state.today_briefing, use_container_width=True, type="primary")
+                    st.link_button(
+                        "Notion 열기",
+                        st.session_state.today_briefing,
+                        use_container_width=True,
+                        type="primary",
+                    )
                 with _c2:
-                    if st.button("읽음", use_container_width=True):
+                    if st.button("읽음", key="briefing_read_btn", use_container_width=True):
                         st.session_state.briefing_read = True
                         st.rerun()
+
+        if not st.session_state.weekly_report_read:
+            from datetime import timedelta
+
+            _ws = date.today() - timedelta(days=date.today().weekday())
+            _week_num = (_ws.day - 1) // 7 + 1
+            _week_display = f"{_ws.month}월 {_week_num}번째 주"
+            _report_url = st.session_state.this_week_report
+            if _report_url:
+                has_notification = True
+            with st.container(border=True):
+                st.caption("이번 주 리포트")
+                st.markdown(f"📊 **주간 리포트 - {_week_display}**")
+                _c1, _c2 = st.columns([3, 2])
+                with _c1:
+                    st.link_button(
+                        "Notion 열기",
+                        _report_url or "#",
+                        use_container_width=True,
+                        type="primary",
+                        disabled=not _report_url,
+                    )
+                with _c2:
+                    if st.button("읽음", key="report_read_btn", use_container_width=True, disabled=not _report_url):
+                        st.session_state.weekly_report_read = True
+                        st.rerun()
+
+        if has_notification:
             st.divider()
 
         st.markdown("**⚡ 빠른 실행**")

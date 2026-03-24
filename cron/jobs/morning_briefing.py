@@ -46,4 +46,4 @@ async def run_morning_briefing() -> None:
         except Exception as e:
             print(f"[브리핑] Notion 생성 실패: {e}")
     else:
-        print(f"[브리핑] NOTION_BRIEFING_PARENT_PAGE_ID 미설정, 저장 건너뜀")
+        print("[브리핑] NOTION_BRIEFING_PARENT_PAGE_ID 미설정, 저장 건너뜀")

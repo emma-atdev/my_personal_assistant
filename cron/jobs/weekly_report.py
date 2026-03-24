@@ -36,4 +36,4 @@ async def run_weekly_report() -> None:
         except Exception as e:
             print(f"[주간 리포트] Notion 생성 실패: {e}")
     else:
-        print(f"[주간 리포트] NOTION_REPORT_PARENT_PAGE_ID 미설정, 저장 건너뜀")
+        print("[주간 리포트] NOTION_REPORT_PARENT_PAGE_ID 미설정, 저장 건너뜀")
