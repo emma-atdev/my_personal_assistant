@@ -48,8 +48,12 @@ def _init_tables_pg(conn: Any) -> None:
                 thread_id  TEXT PRIMARY KEY,
                 title      TEXT NOT NULL DEFAULT '새 대화',
                 created_at TIMESTAMP DEFAULT NOW(),
-                updated_at TIMESTAMP DEFAULT NOW()
+                updated_at TIMESTAMP DEFAULT NOW(),
+                metadata   TEXT NOT NULL DEFAULT '{}'
             )
+        """)
+        cur.execute("""
+            ALTER TABLE conversations ADD COLUMN IF NOT EXISTS metadata TEXT NOT NULL DEFAULT '{}'
         """)
     conn.commit()
 
@@ -67,9 +71,14 @@ def _init_tables_sqlite(conn: sqlite3.Connection) -> None:
             thread_id  TEXT PRIMARY KEY,
             title      TEXT NOT NULL DEFAULT '새 대화',
             created_at TEXT DEFAULT (datetime('now', 'localtime')),
-            updated_at TEXT DEFAULT (datetime('now', 'localtime'))
+            updated_at TEXT DEFAULT (datetime('now', 'localtime')),
+            metadata   TEXT NOT NULL DEFAULT '{}'
         )
     """)
+    try:
+        conn.execute("ALTER TABLE conversations ADD COLUMN metadata TEXT NOT NULL DEFAULT '{}'")
+    except Exception:  # noqa: BLE001
+        pass  # 이미 존재하면 무시
     conn.execute("""
         CREATE TABLE IF NOT EXISTS cost_logs (
             id            INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -129,7 +138,7 @@ def get_conn() -> Generator[Any]:
         finally:
             conn.close()
     else:
-        db_path = Path("storage/notes.db")
+        db_path = Path("storage/data.db")
         db_path.parent.mkdir(exist_ok=True)
         sqlite_conn = sqlite3.connect(db_path)
         sqlite_conn.row_factory = sqlite3.Row

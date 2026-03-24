@@ -35,9 +35,6 @@ _TOOL_LABELS: dict[str, str] = {
     "fetch_arxiv_papers": "ArXiv에서 논문을 검색 중입니다.",
     "fetch_hf_daily_papers": "HuggingFace에서 논문을 가져오는 중입니다.",
     "fetch_pwc_trending": "Papers with Code에서 트렌드를 조회 중입니다.",
-    "search_notes": "메모를 검색 중입니다.",
-    "create_note": "메모를 저장 중입니다.",
-    "list_notes": "메모 목록을 불러오는 중입니다.",
     "save_memory": "기억을 저장 중입니다.",
     "get_memory": "기억을 조회 중입니다.",
     "list_memories": "기억 목록을 불러오는 중입니다.",
@@ -73,16 +70,19 @@ def _tool_label(name: str) -> str:
 # ── 세션 초기화 ───────────────────────────────────────────────
 
 
-def _load_messages_from_state() -> list[dict[str, str]]:
+def _load_messages_from_state() -> list[dict[str, Any]]:
     """현재 thread의 LangGraph 상태에서 메시지를 복원한다."""
     import asyncio
+
+    from tools.conversations import load_message_metadata
 
     loop = get_backend_loop()
     future = asyncio.run_coroutine_threadsafe(st.session_state.agent.aget_state(st.session_state.config), loop)
     state = future.result(timeout=10)
     messages = state.values.get("messages", [])
+    metadata = load_message_metadata(st.session_state.thread_id)
 
-    result = []
+    result: list[dict[str, Any]] = []
     for m in messages:
         if isinstance(m, HumanMessage):
             result.append({"role": "user", "content": str(m.content)})
@@ -93,7 +93,16 @@ def _load_messages_from_state() -> list[dict[str, str]]:
             else:
                 text = str(content)
             if text:
-                result.append({"role": "assistant", "content": text})
+                idx = len(result)
+                msg_meta = metadata.get(str(idx), {})
+                result.append(
+                    {
+                        "role": "assistant",
+                        "content": text,
+                        "elapsed": msg_meta.get("elapsed", 0),
+                        "steps": msg_meta.get("steps", []),
+                    }
+                )
     return result
 
 
@@ -320,9 +329,7 @@ def _hitl_dialog(tool_name: str, tool_args: dict[str, Any]) -> None:
 
 def _handle_hitl() -> None:
     loop = get_backend_loop()
-    future = asyncio.run_coroutine_threadsafe(
-        st.session_state.agent.aget_state(st.session_state.config), loop
-    )
+    future = asyncio.run_coroutine_threadsafe(st.session_state.agent.aget_state(st.session_state.config), loop)
     state = future.result(timeout=10)
     if not state.next:
         st.session_state.pop("hitl_pending", None)
@@ -367,9 +374,9 @@ def _handle_hitl() -> None:
 
             # 툴 직접 실행
             _HITL_TOOL_MAP: dict[str, Any] = {
-                "create_event": lambda a: __import__(
-                    "tools.calendar_tools", fromlist=["create_event"]
-                ).create_event(**a),
+                "create_event": lambda a: __import__("tools.calendar_tools", fromlist=["create_event"]).create_event(
+                    **a
+                ),
                 "create_notion_page": lambda a: __import__(
                     "tools.notion_tools", fromlist=["create_notion_page"]
                 ).create_notion_page(**a),
@@ -382,9 +389,7 @@ def _handle_hitl() -> None:
             # ToolMessage 주입 후 에이전트 재개 (최종 응답 생성)
             tool_msg = ToolMessage(content=str(tool_result), tool_call_id=tool_call_id)
             update_future = asyncio.run_coroutine_threadsafe(
-                st.session_state.agent.aupdate_state(
-                    st.session_state.config, {"messages": [tool_msg]}
-                ),
+                st.session_state.agent.aupdate_state(st.session_state.config, {"messages": [tool_msg]}),
                 loop,
             )
             update_future.result(timeout=10)
@@ -411,6 +416,7 @@ def _handle_hitl() -> None:
             )
         except Exception:
             import traceback
+
             st.session_state.messages.append(
                 {"role": "assistant", "content": f"오류: {traceback.format_exc()}", "elapsed": 0, "steps": []}
             )
@@ -532,6 +538,12 @@ def _handle_user_input(user_input: str) -> None:
     st.session_state.messages.append(
         {"role": "assistant", "content": full_response, "elapsed": elapsed, "steps": steps}
     )
+
+    # steps/elapsed를 conversations metadata에 저장
+    from tools.conversations import save_message_metadata
+
+    msg_index = len(st.session_state.messages) - 1
+    save_message_metadata(st.session_state.thread_id, msg_index, elapsed, steps)
 
     # 첫 메시지면 대화 제목 자동 설정
     if len(st.session_state.messages) == 2:  # user + assistant
