@@ -64,25 +64,3 @@ def fetch_arxiv_papers(query: str = "large language model", max_results: int = 5
         return f"ArXiv 검색 오류: {e}"
 
 
-def fetch_pwc_trending(max_results: int = 5) -> str:
-    """Papers with Code에서 트렌딩 논문과 코드 링크를 가져온다."""
-    try:
-        with httpx.Client(timeout=10) as client:
-            resp = client.get(
-                "https://paperswithcode.com/api/v1/papers/",
-                params={"ordering": "-github_link_count", "items_per_page": max_results},
-            )
-            resp.raise_for_status()
-            data = resp.json()
-
-        output: list[str] = []
-        for p in data.get("results", [])[:max_results]:
-            title = p.get("title", "제목 없음")
-            url = p.get("url_abs", "")
-            code_url = p.get("url_pdf", "")
-            stars = p.get("github_link_count", 0)
-            output.append(f"**{title}**\n{url}\nGitHub 링크 {stars}개\n{code_url}")
-
-        return "\n\n---\n\n".join(output) if output else "논문을 가져올 수 없습니다."
-    except httpx.HTTPError as e:
-        return f"Papers with Code 오류: {e}"
