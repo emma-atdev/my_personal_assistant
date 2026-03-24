@@ -15,7 +15,6 @@ allowed_directories:
       - ".venv"
       - ".git"
       - ".github"
-      - ".chainlit"
       - ".claude"
       - ".idea"
       - ".mypy_cache"

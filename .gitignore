@@ -31,8 +31,6 @@ logs/
 # macOS
 .DS_Store
 
-# Chainlit
-.chainlit/
 
 # 빌드
 dist/

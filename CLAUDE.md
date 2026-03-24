@@ -9,7 +9,7 @@ deepagents(LangChain + LangGraph) 기반, Fly.io 배포.
 uv add <package>          # 패키지 추가 (pip 금지)
 uv sync                   # 의존성 설치
 uv run uvicorn backend.app:app --reload --port 8000
-uv run chainlit run frontend/app.py --port 8001
+uv run streamlit run frontend/app.py --server.port 8001
 uv run python mcp_server/main.py --port 8002
 uv run mypy .             # 타입 체크
 uv run ruff check . && uv run ruff format .
@@ -30,7 +30,7 @@ Orchestrator (gpt-5.2 / Thinking mode)
   └── Subagents (gpt-4o-mini): research / note / file / cron
         └── Tools: @tools/search.py @tools/papers.py @tools/notes.py @tools/memory.py @tools/local_file.py
 
-FastAPI (async + WebSocket) → Chainlit UI
+FastAPI (async + WebSocket) → Streamlit UI
 로컬 MCP 서버 (포트 8002) ← ngrok Tunnel → Fly.io 서버 (https://mpa-jm.fly.dev)
 APScheduler: 매일 10:00 논문 브리핑, 매주 금요일 17:00 주간 리포트
 ```
