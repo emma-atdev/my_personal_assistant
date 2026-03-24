@@ -149,20 +149,15 @@ def _init_session() -> None:
         today_str = today.strftime("%Y-%m-%d")
         week_label = (today - timedelta(days=today.weekday())).strftime("%Y-%m-%d")
 
-        def _extract_notion_url(result: str, title: str | None = None) -> str | None:
-            """검색 결과에서 Notion URL을 추출한다. title 지정 시 해당 제목 항목의 URL만 반환."""
+        def _extract_notion_url(result: str, title: str) -> str | None:
+            """검색 결과에서 Notion URL을 추출한다. 제목이 일치하는 항목의 URL만 반환."""
             lines = result.split("\n")
-            if title:
-                for i, line in enumerate(lines):
-                    if title in line:
-                        for check in lines[i : i + 2]:
-                            for part in check.split():
-                                if part.startswith("https://www.notion.so/"):
-                                    return part.strip("()[]")
-            for line in lines:
-                for part in line.split():
-                    if part.startswith("https://www.notion.so/"):
-                        return part.strip("()[]")
+            for i, line in enumerate(lines):
+                if title in line:
+                    for check in lines[i : i + 2]:
+                        for part in check.split():
+                            if part.startswith("https://www.notion.so/"):
+                                return part.strip("()[]")
             return None
 
         briefing_title = f"아침 브리핑 {today_str}"
