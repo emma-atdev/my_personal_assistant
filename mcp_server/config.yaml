@@ -4,13 +4,30 @@
 allowed_directories:
   - path: "~/my_personal_assistant"
     access: "read"          # read | read_write
-    deny:                   # 민감 파일 차단 (glob 패턴)
+    deny:                   # 민감 파일 차단 (파일명 glob 패턴)
       - ".env"
       - ".env.*"
       - "*.key"
       - "*.pem"
       - "*.p12"
       - "*.pfx"
+    ignore:                 # 목록 조회 시 제외할 디렉토리/파일 (any path part 매칭)
+      - ".venv"
+      - ".git"
+      - ".github"
+      - ".chainlit"
+      - ".claude"
+      - ".idea"
+      - ".mypy_cache"
+      - ".pytest_cache"
+      - ".ruff_cache"
+      - "__pycache__"
+      - "*.egg-info"
+      - "node_modules"
+      - "*.pyc"
+      - "logs"
+      - "storage"
+      - "uv.lock"
 
 # 추후 필요에 따라 디렉토리 추가
 # - path: "~/papers"

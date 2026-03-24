@@ -17,6 +17,22 @@ def _load_config() -> dict[str, object]:
     return dict(yaml.safe_load(CONFIG_PATH.read_text(encoding="utf-8")))
 
 
+def _ignore_patterns(entry: dict[str, object]) -> list[str]:
+    """config entry에서 ignore 패턴 목록을 반환한다."""
+    patterns = entry.get("ignore") or []
+    return list(patterns)  # type: ignore[arg-type]
+
+
+def _is_ignored_path(path: Path, patterns: list[str]) -> bool:
+    """경로의 any part가 ignore 패턴에 매칭되면 True."""
+    import fnmatch
+
+    for part in path.parts:
+        if any(fnmatch.fnmatch(part, p) for p in patterns):
+            return True
+    return False
+
+
 def _is_allowed(path: str, access: str = "read") -> bool:
     """경로가 허용 목록에 포함되는지 확인한다. deny 패턴에 해당하면 차단."""
     import fnmatch
@@ -66,6 +82,18 @@ def read_local_file(path: str) -> str:
 @mcp.tool()
 def list_local_files(directory: str = "~/projects") -> str:
     """로컬 디렉토리의 파일 목록을 반환한다. 허용된 디렉토리만 조회 가능."""
+    config = _load_config()
+    resolved = Path(directory).expanduser().resolve()
+    allowed: list[object] = config.get("allowed_directories") or []  # type: ignore[assignment]
+    patterns: list[str] = []
+    for entry in allowed:
+        if not isinstance(entry, dict):
+            continue
+        allowed_path = Path(str(entry.get("path", ""))).expanduser().resolve()
+        if str(resolved).startswith(str(allowed_path)):
+            patterns = _ignore_patterns(entry)
+            break
+
     if not _is_allowed(directory):
         return f"접근 거부: '{directory}'는 허용되지 않은 경로입니다."
     d = Path(directory).expanduser()
@@ -73,7 +101,11 @@ def list_local_files(directory: str = "~/projects") -> str:
         return f"디렉토리를 찾을 수 없습니다: {directory}"
     if not d.is_dir():
         return "디렉토리가 아닙니다."
-    files = sorted(str(f.relative_to(d)) for f in d.rglob("*") if f.is_file())
+    files = sorted(
+        str(f.relative_to(d))
+        for f in d.rglob("*")
+        if f.is_file() and not _is_ignored_path(f.relative_to(d), patterns)
+    )
     return "\n".join(files[:200]) if files else "파일이 없습니다."
 
 
@@ -131,7 +163,22 @@ async def rest_list_files(
         raise HTTPException(status_code=404, detail="디렉토리를 찾을 수 없습니다.")
     if not d.is_dir():
         raise HTTPException(status_code=400, detail="디렉토리가 아닙니다.")
-    files = [str(f.relative_to(d)) for f in sorted(d.rglob("*")) if f.is_file()]
+    config = _load_config()
+    resolved_d = d.resolve()
+    allowed2: list[object] = config.get("allowed_directories") or []  # type: ignore[assignment]
+    patterns2: list[str] = []
+    for entry in allowed2:
+        if not isinstance(entry, dict):
+            continue
+        allowed_path = Path(str(entry.get("path", ""))).expanduser().resolve()
+        if str(resolved_d).startswith(str(allowed_path)):
+            patterns2 = _ignore_patterns(entry)
+            break
+    files = [
+        str(f.relative_to(d))
+        for f in sorted(d.rglob("*"))
+        if f.is_file() and not _is_ignored_path(f.relative_to(d), patterns2)
+    ]
     return {"files": files[:200], "total": len(files), "directory": str(d)}
 
 
