@@ -1,7 +1,14 @@
 """논문 수집 툴 — Hugging Face Daily Papers, ArXiv, Papers with Code."""
 
+from functools import lru_cache
+
 import arxiv
 import httpx
+
+
+@lru_cache(maxsize=1)
+def _arxiv_client() -> arxiv.Client:
+    return arxiv.Client()
 
 
 def fetch_hf_daily_papers(max_results: int = 5) -> str:
@@ -33,7 +40,7 @@ def fetch_hf_daily_papers(max_results: int = 5) -> str:
 def fetch_arxiv_papers(query: str = "large language model", max_results: int = 5) -> str:
     """ArXiv에서 LLM 관련 최신 논문을 검색한다. cs.CL, cs.AI, cs.LG 카테고리 대상."""
     try:
-        client = arxiv.Client()
+        client = _arxiv_client()
         search = arxiv.Search(
             query=f"({query}) AND (cat:cs.CL OR cat:cs.AI OR cat:cs.LG)",
             max_results=max_results,

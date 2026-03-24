@@ -1,17 +1,26 @@
 """Tavily 웹 검색 툴."""
 
 import os
+from functools import lru_cache
 
 from tavily import TavilyClient
 
 
-def search_web(query: str, max_results: int = 5) -> str:
-    """웹에서 정보를 검색한다. 최신 정보 조회나 사실 확인이 필요할 때 사용."""
+@lru_cache(maxsize=1)
+def _get_client() -> TavilyClient:
     api_key = os.environ.get("TAVILY_API_KEY", "")
     if not api_key:
-        return "TAVILY_API_KEY가 설정되지 않았습니다."
+        raise RuntimeError("TAVILY_API_KEY가 설정되지 않았습니다.")
+    return TavilyClient(api_key=api_key)
 
-    client = TavilyClient(api_key=api_key)
+
+def search_web(query: str, max_results: int = 5) -> str:
+    """웹에서 정보를 검색한다. 최신 정보 조회나 사실 확인이 필요할 때 사용."""
+    try:
+        client = _get_client()
+    except RuntimeError as e:
+        return str(e)
+
     results = client.search(query, max_results=max_results)
 
     output: list[str] = []
