@@ -4,7 +4,6 @@ from langchain.chat_models import init_chat_model
 
 from tools.notion_tools import (
     append_notion_block,
-    create_notion_page,
     get_notion_page,
     search_notion,
     sync_changelog_to_notion,
@@ -19,14 +18,13 @@ NOTE_SUBAGENT: dict[str, object] = {
         "활용 기준:\n"
         "- Notion 검색 → search_notion\n"
         "- Notion 페이지 읽기 → get_notion_page\n"
-        "- Notion 페이지 생성 → create_notion_page\n"
         "- Notion 페이지에 내용 추가 → append_notion_block\n"
+        "- Notion 페이지 생성은 오케스트레이터가 직접 처리 — 요청만 전달할 것\n"
         "- CHANGELOG → Notion 동기화 → sync_changelog_to_notion\n"
     ),
     "tools": [
         search_notion,
         get_notion_page,
-        create_notion_page,
         append_notion_block,
         sync_changelog_to_notion,
     ],

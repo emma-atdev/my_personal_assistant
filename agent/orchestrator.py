@@ -11,7 +11,6 @@ from langgraph.graph.state import CompiledStateGraph
 from agent.subagents.code import CODE_SUBAGENT
 from agent.subagents.cron import CRON_SUBAGENT
 from agent.subagents.file import FILE_SUBAGENT
-from utils.mcp_config import allowed_dirs_str as _allowed_dirs_str
 from agent.subagents.github import GITHUB_SUBAGENT
 from agent.subagents.note import NOTE_SUBAGENT
 from agent.subagents.research import RESEARCH_SUBAGENT
@@ -19,7 +18,9 @@ from tools.calendar_tools import create_event, get_today_schedule, list_events
 from tools.changelog import append_changelog, read_changelog
 from tools.cost_tracker import get_cost_summary
 from tools.memory import delete_memory, get_memory, list_memories, save_memory
+from tools.notion_tools import create_notion_page
 from utils.logger import AgentLoggingHandler
+from utils.mcp_config import allowed_dirs_str as _allowed_dirs_str
 
 _SYSTEM_PROMPT_TEMPLATE = """
 오늘 날짜: {today}
@@ -35,7 +36,8 @@ LLM 전문 AI 개발자의 개인 비서입니다.
 서브에이전트 활용 기준 (반드시 준수):
 - research: 웹 검색, AI 뉴스, 논문 탐색
   — 검색이 필요한 질문은 절대 자체 지식으로 답변하지 말고 반드시 research 서브에이전트 호출
-- note: Notion 페이지 검색·조회·생성, CHANGELOG → Notion 동기화(sync_changelog_to_notion), 메모 저장
+- note: Notion 페이지 검색·조회, CHANGELOG → Notion 동기화(sync_changelog_to_notion), 메모 저장
+- Notion 페이지 생성: note 서브에이전트가 아닌 오케스트레이터가 create_notion_page 직접 호출 (HITL 적용)
 - file: 로컬 파일 읽기, 디렉토리 탐색 (MCP 필요)
   — 파일/디렉토리 관련 작업은 예외 없이 file 서브에이전트에 위임
   — ls, read_file 등 내장 툴 직접 호출 금지 (로컬 파일시스템에 연결되지 않음)
@@ -78,7 +80,8 @@ Changelog 기록 규칙 (필수 — 절대 빠뜨리지 말 것):
 - append_changelog 호출을 빠뜨리는 것은 오류다
 
 연결된 외부 서비스 (모두 API 키 설정 완료, 즉시 사용 가능):
-- Notion (메모 포함): search_notion/get_notion_page/create_notion_page (note 서브에이전트)
+- Notion 조회: search_notion/get_notion_page/append_notion_block (note 서브에이전트)
+- Notion 페이지 생성: create_notion_page (오케스트레이터 직접 호출 — HITL 적용)
 - GitHub: list_my_issues/list_my_prs 등 (github 서브에이전트)
 - Google Calendar: get_today_schedule/list_events/create_event
 - 웹 검색: search_web (research 서브에이전트)
@@ -208,6 +211,8 @@ def create_orchestrator(
             create_event,
             # 비용
             get_cost_summary,
+            # Notion 페이지 생성 (HITL)
+            create_notion_page,
             # 변경 이력
             append_changelog,
             read_changelog,
