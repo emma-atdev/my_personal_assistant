@@ -334,14 +334,18 @@ def main() -> None:
                 None,
             )
             if today_briefing:
-                st.info(f"📬 오늘 브리핑이 도착했어요!\n\n**{today_briefing['title']}**")
-                col1, col2 = st.columns(2)
-                with col1:
-                    if st.button("📖 보기", use_container_width=True):
-                        st.session_state.briefing_read = True
-                        st.session_state.quick_input = "오늘 브리핑 보여줘"
-                with col2:
-                    if st.button("✕ 닫기", use_container_width=True):
+                with st.expander(f"📬 {today_briefing['title']}", expanded=False):
+                    from tools.notes import get_note
+
+                    note = get_note(today_briefing["id"])
+                    # 메타데이터 헤더 제거 후 본문만 표시
+                    lines = note.splitlines()
+                    body_start = next(
+                        (i for i, line in enumerate(lines) if line.startswith("작성:") or line.startswith("태그:")), 0
+                    )
+                    body = "\n".join(lines[body_start + 1 :]).strip()
+                    st.markdown(body)
+                    if st.button("✕ 읽음", use_container_width=True):
                         st.session_state.briefing_read = True
                         st.rerun()
                 st.divider()
