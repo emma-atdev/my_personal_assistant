@@ -37,12 +37,10 @@ def use_test_db(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
         finally:
             conn.close()
 
-    # storage.db 자체와 각 툴 모듈의 get_conn/PH를 모두 패치
     monkeypatch.setattr(db_module, "get_conn", _test_get_conn)
 
     for module_path in [
         "tools.memory",
-        "tools.notes",
         "tools.cost_tracker",
     ]:
         import importlib

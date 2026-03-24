@@ -11,7 +11,6 @@ from cron.jobs.morning_briefing import run_morning_briefing
 from cron.jobs.weekly_report import run_weekly_report
 from cron.scheduler import setup_scheduler
 from tools.cost_tracker import get_cost_summary
-from tools.notes import list_notes_raw, search_notes
 from tools.papers import fetch_hf_daily_papers
 
 # WebSocket 연결 풀
@@ -69,17 +68,6 @@ async def health() -> dict[str, str]:
     return {"status": "ok"}
 
 
-@app.get("/api/notes")
-async def get_notes(limit: int = 20) -> dict[str, object]:
-    """최근 메모 목록을 반환한다."""
-    return {"notes": list_notes_raw(limit=limit)}
-
-
-@app.get("/api/notes/search")
-async def search_notes_api(q: str, limit: int = 5) -> dict[str, object]:
-    """메모를 검색한다."""
-    return {"result": search_notes(q, limit=limit)}
-
 
 @app.get("/api/costs")
 async def get_costs() -> dict[str, str]:
@@ -92,13 +80,6 @@ async def get_trending_papers(limit: int = 5) -> dict[str, str]:
     """HuggingFace 인기 논문을 반환한다."""
     return {"papers": fetch_hf_daily_papers(max_results=limit)}
 
-
-@app.get("/api/briefing/latest")
-async def get_latest_briefing() -> dict[str, object]:
-    """가장 최근 아침 브리핑 메모를 반환한다."""
-    notes = list_notes_raw(limit=30)
-    briefings = [n for n in notes if "브리핑" in (n.get("tags") or "")]
-    return {"briefing": briefings[0] if briefings else None}
 
 
 @app.post("/api/broadcast")

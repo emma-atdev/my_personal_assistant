@@ -17,7 +17,6 @@ from tools.calendar_tools import create_event, get_today_schedule, list_events
 from tools.changelog import append_changelog, read_changelog
 from tools.cost_tracker import get_cost_summary
 from tools.memory import delete_memory, get_memory, list_memories, save_memory
-from tools.notes import get_note, list_notes, search_notes
 from utils.logger import AgentLoggingHandler
 
 _SYSTEM_PROMPT_TEMPLATE = """
@@ -34,8 +33,7 @@ LLM 전문 AI 개발자의 개인 비서입니다.
 서브에이전트 활용 기준 (반드시 준수):
 - research: 웹 검색, AI 뉴스, 논문 탐색
   — 검색이 필요한 질문은 절대 자체 지식으로 답변하지 말고 반드시 research 서브에이전트 호출
-- note: 메모 생성·수정·삭제, Notion 페이지 검색·조회·생성, CHANGELOG → Notion 동기화(sync_changelog_to_notion)
-- 메모 단순 조회(get_note/list_notes/search_notes)는 직접 사용, 생성·수정·삭제는 반드시 note 서브에이전트 사용
+- note: Notion 페이지 검색·조회·생성, CHANGELOG → Notion 동기화(sync_changelog_to_notion), 메모 저장
 - file: 로컬 파일 읽기 (MCP 필요)
 - cron: 브리핑 생성, 리포트 작성
 - code: Python 코드 작성·실행, 수학 계산, 데이터 분석 (Docker 샌드박스)
@@ -71,7 +69,7 @@ Changelog 기록 규칙 (필수 — 절대 빠뜨리지 말 것):
 - append_changelog 호출을 빠뜨리는 것은 오류다
 
 연결된 외부 서비스 (모두 API 키 설정 완료, 즉시 사용 가능):
-- Notion: search_notion/get_notion_page/create_notion_page (note 서브에이전트)
+- Notion (메모 포함): search_notion/get_notion_page/create_notion_page (note 서브에이전트)
 - GitHub: list_my_issues/list_my_prs 등 (github 서브에이전트)
 - Google Calendar: get_today_schedule/list_events/create_event
 - 웹 검색: search_web (research 서브에이전트)
@@ -197,10 +195,6 @@ def create_orchestrator(
             get_memory,
             list_memories,
             delete_memory,
-            # 노트 (빠른 조회용 — 생성/수정/삭제는 note 서브에이전트)
-            get_note,
-            list_notes,
-            search_notes,
             # 캘린더
             get_today_schedule,
             list_events,

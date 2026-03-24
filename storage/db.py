@@ -27,16 +27,6 @@ _INITIALIZED = False
 def _init_tables_pg(conn: Any) -> None:
     with conn.cursor() as cur:
         cur.execute("""
-            CREATE TABLE IF NOT EXISTS notes (
-                id         SERIAL PRIMARY KEY,
-                title      TEXT NOT NULL,
-                content    TEXT NOT NULL,
-                tags       TEXT DEFAULT '',
-                created_at TIMESTAMP DEFAULT NOW(),
-                updated_at TIMESTAMP DEFAULT NOW()
-            )
-        """)
-        cur.execute("""
             CREATE TABLE IF NOT EXISTS memories (
                 key        TEXT PRIMARY KEY,
                 value      TEXT NOT NULL,
@@ -65,16 +55,6 @@ def _init_tables_pg(conn: Any) -> None:
 
 
 def _init_tables_sqlite(conn: sqlite3.Connection) -> None:
-    conn.execute("""
-        CREATE TABLE IF NOT EXISTS notes (
-            id         INTEGER PRIMARY KEY AUTOINCREMENT,
-            title      TEXT NOT NULL,
-            content    TEXT NOT NULL,
-            tags       TEXT DEFAULT '',
-            created_at TEXT DEFAULT (datetime('now', 'localtime')),
-            updated_at TEXT DEFAULT (datetime('now', 'localtime'))
-        )
-    """)
     conn.execute("""
         CREATE TABLE IF NOT EXISTS memories (
             key        TEXT PRIMARY KEY,

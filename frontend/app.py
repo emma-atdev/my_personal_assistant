@@ -139,6 +139,23 @@ def _init_session() -> None:
         st.session_state.total_tokens = {"input": 0, "output": 0}
     if "briefing_read" not in st.session_state:
         st.session_state.briefing_read = False
+    if "today_briefing" not in st.session_state:
+        # 오늘 브리핑 Notion 페이지를 세션당 한 번만 조회
+        from tools.notion_tools import search_notion
+
+        today_str = date.today().strftime("%Y-%m-%d")
+        try:
+            result = search_notion(f"아침 브리핑 {today_str}")
+            # 결과에서 오늘 브리핑 URL 추출
+            notion_url = ""
+            if "https://www.notion.so/" in result:
+                for part in result.split():
+                    if part.startswith("https://www.notion.so/"):
+                        notion_url = part.strip("()[]")
+                        break
+            st.session_state.today_briefing = notion_url or None
+        except Exception:
+            st.session_state.today_briefing = None
     if "conv_renaming" not in st.session_state:
         st.session_state.conv_renaming = None  # 이름 수정 중인 thread_id
 
@@ -617,39 +634,17 @@ def main() -> None:
         st.divider()
 
         # ── 브리핑 알림 ──────────────────────────────────────────
-        if not st.session_state.briefing_read:
-            from tools.notes import list_notes_raw
-
-            today_str = date.today().strftime("%Y-%m-%d")
-            recent = list_notes_raw(limit=10)
-            today_briefing = next(
-                (n for n in recent if "브리핑" in (n.get("tags") or "") and today_str in str(n.get("created_at", ""))),
-                None,
-            )
-            if today_briefing:
-                # 메모 content에서 Notion URL 추출 (---\nNotion: <url> 형식)
-                from tools.notes import get_note
-
-                note_raw = get_note(today_briefing["id"])
-                notion_url = ""
-                if "\n---\nNotion: " in note_raw:
-                    notion_url = note_raw.rsplit("\n---\nNotion: ", 1)[1].strip()
-                title = today_briefing["title"]
-
-                with st.container(border=True):
-                    st.caption("오늘의 브리핑")
-                    st.markdown(f"📬 **{title}**")
-                    _c1, _c2 = st.columns([3, 2])
-                    with _c1:
-                        if notion_url:
-                            st.link_button("📖 Notion 열기", notion_url, use_container_width=True, type="primary")
-                        else:
-                            st.button("📖 Notion 열기", use_container_width=True, disabled=True)
-                    with _c2:
-                        if st.button("✓ 읽음", use_container_width=True):
-                            st.session_state.briefing_read = True
-                            st.rerun()
-                st.divider()
+        if not st.session_state.briefing_read and st.session_state.today_briefing:
+            with st.container(border=True):
+                st.caption("오늘의 브리핑")
+                _c1, _c2 = st.columns([3, 2])
+                with _c1:
+                    st.link_button("Notion 열기", st.session_state.today_briefing, use_container_width=True, type="primary")
+                with _c2:
+                    if st.button("읽음", use_container_width=True):
+                        st.session_state.briefing_read = True
+                        st.rerun()
+            st.divider()
 
         st.markdown("**⚡ 빠른 실행**")
         for label, query in _QUICK_ACTIONS:
