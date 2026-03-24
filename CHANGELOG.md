@@ -1,6 +1,7 @@
 # Changelog
 
 ## 2026-03-24
+- 이번 달(2026-03) API 비용 요약 조회 및 사용자에게 안내
 - Notion에 'HITL 테스트' 페이지 생성
 - code 서브에이전트로 소수 판별 함수 is_prime 작성 및 테스트(알려진 케이스/1~100 소수 목록) 실행
 - code 서브에이전트로 scikit-learn RandomForestClassifier를 iris 데이터셋에 학습/평가하여 정확도, 혼동행렬, 분류리포트 산출

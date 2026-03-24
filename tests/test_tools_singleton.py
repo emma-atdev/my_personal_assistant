@@ -8,6 +8,7 @@ def test_search_client_is_singleton(monkeypatch: object) -> None:
     monkeypatch.setenv("TAVILY_API_KEY", "test-key")  # type: ignore[attr-defined]
 
     from tools.search import _get_client
+
     _get_client.cache_clear()
 
     with patch("tools.search.TavilyClient") as mock_cls:
@@ -24,6 +25,7 @@ def test_search_client_no_api_key(monkeypatch: object) -> None:
     monkeypatch.delenv("TAVILY_API_KEY", raising=False)  # type: ignore[attr-defined]
 
     from tools.search import _get_client, search_web
+
     _get_client.cache_clear()
 
     result = search_web("테스트")
@@ -33,6 +35,7 @@ def test_search_client_no_api_key(monkeypatch: object) -> None:
 def test_arxiv_client_is_singleton() -> None:
     """arxiv.Client는 첫 호출 때만 생성되고 이후 재사용된다."""
     from tools.papers import _arxiv_client
+
     _arxiv_client.cache_clear()
 
     with patch("tools.papers.arxiv.Client") as mock_cls:
