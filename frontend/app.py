@@ -396,6 +396,7 @@ def _handle_user_input(user_input: str) -> None:
         step_placeholder: Any = None
         step_label: str = ""
         step_start: float = 0.0
+        steps: list[dict[str, Any]] = []
 
         def _start_step(label: str) -> None:
             nonlocal step_placeholder, step_label, step_start
@@ -403,6 +404,7 @@ def _handle_user_input(user_input: str) -> None:
             if step_placeholder is not None:
                 step_elapsed = int(time.time() - step_start)
                 step_placeholder.caption(f"{step_label} — {step_elapsed}초")
+                steps.append({"label": step_label, "elapsed": step_elapsed})
             step_label = label
             step_start = time.time()
             with status:
@@ -453,6 +455,7 @@ def _handle_user_input(user_input: str) -> None:
         if step_placeholder is not None:
             step_elapsed = int(time.time() - step_start)
             step_placeholder.caption(f"{step_label} — {step_elapsed}초")
+            steps.append({"label": step_label, "elapsed": step_elapsed})
 
         elapsed = int(time.time() - start_time)
         status.update(label=f"완료 ({elapsed}초)", state="complete", expanded=False)
@@ -466,7 +469,9 @@ def _handle_user_input(user_input: str) -> None:
             st.session_state.total_tokens["input"] += session_tokens["input"]
             st.session_state.total_tokens["output"] += session_tokens["output"]
 
-    st.session_state.messages.append({"role": "assistant", "content": full_response, "elapsed": elapsed})
+    st.session_state.messages.append(
+        {"role": "assistant", "content": full_response, "elapsed": elapsed, "steps": steps}
+    )
 
     # 첫 메시지면 대화 제목 자동 설정
     if len(st.session_state.messages) == 2:  # user + assistant
@@ -722,8 +727,12 @@ def main() -> None:
     # ── 채팅 영역 ─────────────────────────────────────────────
     for i, msg in enumerate(st.session_state.messages):
         with st.chat_message(msg["role"]):
+            if msg["role"] == "assistant" and msg.get("steps"):
+                with st.status(f"완료 ({msg.get('elapsed', 0)}초)", state="complete", expanded=False):
+                    for step in msg["steps"]:
+                        st.caption(f"{step['label']} — {step['elapsed']}초")
             st.markdown(msg["content"])
-            if msg["role"] == "assistant" and msg.get("elapsed"):
+            if msg["role"] == "assistant" and msg.get("elapsed") and not msg.get("steps"):
                 st.caption(f"완료 ({msg['elapsed']}초)")
 
     # 빠른 실행 버튼 쿼리 처리
