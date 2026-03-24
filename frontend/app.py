@@ -118,10 +118,6 @@ def _switch_conversation(thread_id: str) -> None:
 def _init_session() -> None:
     from tools.conversations import create_conversation, list_conversations
 
-    if "agent" not in st.session_state:
-        agent, _ = create_orchestrator(thread_id="default")
-        st.session_state.agent = agent
-
     if "thread_id" not in st.session_state:
         convs = list_conversations(limit=20)
         # 제목이 있는 대화 우선, 없으면 '새 채팅' 사용, 없으면 생성
@@ -134,8 +130,9 @@ def _init_session() -> None:
             thread_id = create_conversation("새 채팅")
         st.session_state.thread_id = thread_id
 
-    if "config" not in st.session_state:
-        _, config = create_orchestrator(thread_id=st.session_state.thread_id)
+    if "agent" not in st.session_state or "config" not in st.session_state:
+        agent, config = create_orchestrator(thread_id=st.session_state.thread_id)
+        st.session_state.agent = agent
         st.session_state.config = config
 
     if "messages" not in st.session_state:
@@ -372,28 +369,30 @@ def _handle_hitl() -> None:
         try:
             from langchain_core.messages import ToolMessage
 
-            # 툴 직접 실행
-            _HITL_TOOL_MAP: dict[str, Any] = {
-                "create_event": lambda a: __import__("tools.calendar_tools", fromlist=["create_event"]).create_event(
-                    **a
-                ),
-                "create_notion_page": lambda a: __import__(
-                    "tools.notion_tools", fromlist=["create_notion_page"]
-                ).create_notion_page(**a),
-            }
-            if tool_name in _HITL_TOOL_MAP:
-                tool_result = _HITL_TOOL_MAP[tool_name](tool_args)
-            else:
-                tool_result = f"{tool_name} 실행됨"
+            # edit_file / write_file: deepagents interrupt 방식 — ainvoke(None)으로 재개하면 자동 실행
+            _DEEPAGENTS_RESUME_TOOLS = {"edit_file", "write_file"}
 
-            # ToolMessage 주입 후 에이전트 재개 (최종 응답 생성)
-            tool_msg = ToolMessage(content=str(tool_result), tool_call_id=tool_call_id)
-            update_future = asyncio.run_coroutine_threadsafe(
-                st.session_state.agent.aupdate_state(st.session_state.config, {"messages": [tool_msg]}),
-                loop,
-            )
-            update_future.result(timeout=10)
+            if tool_name not in _DEEPAGENTS_RESUME_TOOLS:
+                # 직접 실행 후 ToolMessage 주입
+                from tools.calendar_tools import create_event as _create_event
+                from tools.notion_tools import create_notion_page as _create_notion_page
 
+                _HITL_TOOL_MAP: dict[str, Any] = {
+                    "create_event": lambda a: _create_event(**a),
+                    "create_notion_page": lambda a: _create_notion_page(**a),
+                }
+                if tool_name in _HITL_TOOL_MAP:
+                    tool_result = _HITL_TOOL_MAP[tool_name](tool_args)
+                else:
+                    tool_result = f"{tool_name} 실행됨"
+                tool_msg = ToolMessage(content=str(tool_result), tool_call_id=tool_call_id)
+                update_future = asyncio.run_coroutine_threadsafe(
+                    st.session_state.agent.aupdate_state(st.session_state.config, {"messages": [tool_msg]}),
+                    loop,
+                )
+                update_future.result(timeout=10)  # 실패 시 여기서 예외 발생 → except로 이동
+
+            # 에이전트 재개 (edit_file/write_file은 여기서 deepagents가 직접 실행)
             resume_future = asyncio.run_coroutine_threadsafe(
                 st.session_state.agent.ainvoke(None, st.session_state.config), loop
             )
@@ -421,9 +420,29 @@ def _handle_hitl() -> None:
                 {"role": "assistant", "content": f"오류: {traceback.format_exc()}", "elapsed": 0, "steps": []}
             )
     else:
-        st.session_state.messages.append(
-            {"role": "assistant", "content": "작업이 취소됐습니다.", "elapsed": 0, "steps": []}
-        )
+        # 취소 시 ToolMessage 주입 후 에이전트 재개 (edit_file/write_file 포함 모든 HITL 툴)
+        try:
+            from langchain_core.messages import ToolMessage
+
+            cancel_msg = ToolMessage(content="사용자가 작업을 취소했습니다.", tool_call_id=tool_call_id)
+            update_future = asyncio.run_coroutine_threadsafe(
+                st.session_state.agent.aupdate_state(st.session_state.config, {"messages": [cancel_msg]}),
+                loop,
+            )
+            update_future.result(timeout=10)
+            resume_future = asyncio.run_coroutine_threadsafe(
+                st.session_state.agent.ainvoke(None, st.session_state.config), loop
+            )
+            result = resume_future.result(timeout=60)
+            all_messages = result.get("messages", [])
+            response = _extract_text(all_messages)
+            st.session_state.messages.append(
+                {"role": "assistant", "content": response or "작업이 취소됐습니다.", "elapsed": 0, "steps": []}
+            )
+        except Exception:
+            st.session_state.messages.append(
+                {"role": "assistant", "content": "작업이 취소됐습니다.", "elapsed": 0, "steps": []}
+            )
     st.rerun()
 
 
@@ -567,8 +586,18 @@ def _export_chat() -> str:
     """대화 내역을 Markdown으로 변환한다."""
     lines = [f"# 대화 내역 ({datetime.now().strftime('%Y-%m-%d %H:%M')})\n"]
     for msg in st.session_state.messages:
-        role = "사용자" if msg["role"] == "user" else "비서"
-        lines.append(f"**{role}:**\n\n{msg['content']}\n")
+        role = "사용자" if msg.get("role") == "user" else "비서"
+        content = msg.get("content", "")
+        block = f"**{role}:**\n\n{content}"
+        if msg.get("role") == "assistant":
+            elapsed = msg.get("elapsed", 0)
+            steps = msg.get("steps", [])
+            if elapsed:
+                block += f"\n\n*⏱ {elapsed}초*"
+            if steps:
+                step_lines = " → ".join(s["label"] for s in steps if s.get("label"))
+                block += f"\n\n*단계: {step_lines}*"
+        lines.append(block)
     return "\n---\n".join(lines)
 
 
