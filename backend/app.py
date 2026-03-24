@@ -68,7 +68,6 @@ async def health() -> dict[str, str]:
     return {"status": "ok"}
 
 
-
 @app.get("/api/costs")
 async def get_costs() -> dict[str, str]:
     """이번 달 API 비용 요약을 반환한다."""
@@ -79,7 +78,6 @@ async def get_costs() -> dict[str, str]:
 async def get_trending_papers(limit: int = 5) -> dict[str, str]:
     """HuggingFace 인기 논문을 반환한다."""
     return {"papers": fetch_hf_daily_papers(max_results=limit)}
-
 
 
 @app.post("/api/broadcast")
