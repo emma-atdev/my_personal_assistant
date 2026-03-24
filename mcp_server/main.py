@@ -19,8 +19,10 @@ def _load_config() -> dict[str, object]:
 
 def _ignore_patterns(entry: dict[str, object]) -> list[str]:
     """config entry에서 ignore 패턴 목록을 반환한다."""
-    patterns = entry.get("ignore") or []
-    return list(patterns)  # type: ignore[arg-type]
+    raw = entry.get("ignore")
+    if not isinstance(raw, list):
+        return []
+    return [str(p) for p in raw if isinstance(p, str)]
 
 
 def _is_ignored_path(path: Path, patterns: list[str]) -> bool:
@@ -47,7 +49,10 @@ def _is_allowed(path: str, access: str = "read") -> bool:
         if not str(resolved).startswith(str(allowed_path)):
             continue
         # deny 패턴 검사 — 파일명 기준
-        deny_patterns: list[str] = entry.get("deny") or []  # type: ignore[assignment]
+        raw_deny = entry.get("deny")
+        deny_patterns: list[str] = (
+            [str(p) for p in raw_deny if isinstance(p, str)] if isinstance(raw_deny, list) else []
+        )
         filename = resolved.name
         if any(fnmatch.fnmatch(filename, pattern) for pattern in deny_patterns):
             return False
