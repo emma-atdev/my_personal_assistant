@@ -114,15 +114,16 @@ def create_notion_page(title: str, content: str, parent_page_id: str | None = No
     Args:
         title: 페이지 제목
         content: 페이지 본문 (마크다운 형식)
-        parent_page_id: 상위 페이지 ID (없으면 워크스페이스 최상단에 생성)
+        parent_page_id: 상위 페이지 ID (없으면 NOTION_DEFAULT_PARENT_PAGE_ID 사용)
 
     Returns:
         생성된 페이지 URL
     """
     try:
+        resolved_parent = parent_page_id or os.getenv("NOTION_DEFAULT_PARENT_PAGE_ID")
         parent: dict[str, Any] = (
-            {"type": "page_id", "page_id": parent_page_id}
-            if parent_page_id
+            {"type": "page_id", "page_id": resolved_parent}
+            if resolved_parent
             else {"type": "workspace", "workspace": True}
         )
 
