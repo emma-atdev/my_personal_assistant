@@ -3,6 +3,7 @@
 import asyncio
 import queue
 import threading
+import time
 from collections.abc import AsyncGenerator, Generator
 from datetime import date, datetime
 from typing import Any
@@ -101,7 +102,15 @@ async def _stream_events(agent: Any, config: Any, user_input: str) -> AsyncGener
     ):
         etype = event["event"]
 
-        if etype == "on_chat_model_stream":
+        if etype == "on_chat_model_start":
+            metadata = event.get("metadata", {})
+            ns = metadata.get("checkpoint_ns", "")
+            if ns.startswith("tools:"):
+                yield {"type": "status", "label": "🤖 서브에이전트 분석 중..."}
+            else:
+                yield {"type": "status", "label": "orchestrator_llm_start"}
+
+        elif etype == "on_chat_model_stream":
             # 서브에이전트 출력 제외 — 서브에이전트는 checkpoint_ns가 'tools:'로 시작
             metadata = event.get("metadata", {})
             if metadata.get("checkpoint_ns", "").startswith("tools:"):
@@ -120,13 +129,12 @@ async def _stream_events(agent: Any, config: Any, user_input: str) -> AsyncGener
                             yield {"type": "token", "text": text}
 
         elif etype == "on_tool_start":
-            # 서브에이전트 내부 툴은 제외 — 오케스트레이터 레벨 툴만 표시
-            if not event.get("metadata", {}).get("checkpoint_ns", "").startswith("tools:"):
-                yield {"type": "tool_start", "name": event.get("name", "")}
+            name = event.get("name", "")
+            args = event.get("data", {}).get("input", {}) if name == "task" else {}
+            yield {"type": "tool_start", "name": name, "args": args}
 
         elif etype == "on_tool_end":
-            if not event.get("metadata", {}).get("checkpoint_ns", "").startswith("tools:"):
-                yield {"type": "tool_end", "name": event.get("name", "")}
+            yield {"type": "tool_end", "name": event.get("name", "")}
 
         elif etype == "on_chat_model_end":
             output = event["data"].get("output")
@@ -165,12 +173,22 @@ def _run_events(user_input: str) -> Generator[dict[str, Any]]:
         finally:
             loop.close()
 
+    stop_tick = threading.Event()
+
+    def _ticker() -> None:
+        while not stop_tick.is_set():
+            time.sleep(0.5)
+            event_queue.put({"type": "tick"})
+
     thread = threading.Thread(target=_thread_target, daemon=True)
+    tick_thread = threading.Thread(target=_ticker, daemon=True)
     thread.start()
+    tick_thread.start()
 
     while True:
         ev = event_queue.get()
         if ev is None:
+            stop_tick.set()
             break
         yield ev
 
@@ -262,25 +280,77 @@ def _handle_user_input(user_input: str) -> None:
         st.markdown(user_input)
 
     with st.chat_message("assistant"):
-        status = st.status("생각 중...", expanded=False)
+        status = st.status("🤔 요청 분석 중...", expanded=False)
+        timer_box = st.empty()
         text_box = st.empty()
 
         full_response = ""
         session_tokens = {"input": 0, "output": 0}
+        start_time = time.time()
+        tool_called = False
+
+        # 단계별 소요 시간 추적
+        step_placeholder: Any = None
+        step_label: str = ""
+        step_start: float = 0.0
+
+        def _start_step(label: str) -> None:
+            nonlocal step_placeholder, step_label, step_start
+            # 이전 단계 완료 시간 기록
+            if step_placeholder is not None:
+                step_elapsed = int(time.time() - step_start)
+                step_placeholder.caption(f"{step_label} — {step_elapsed}초")
+            step_label = label
+            step_start = time.time()
+            with status:
+                step_placeholder = st.empty()
+                step_placeholder.caption(label)
 
         for ev in _run_events(user_input):
-            if ev["type"] == "token":
+            elapsed = int(time.time() - start_time)
+            timer_box.caption(f"⏱ {elapsed}초 경과")
+            if ev["type"] == "tick":
+                continue
+            elif ev["type"] == "token":
                 full_response += ev["text"]
                 text_box.markdown(full_response + "▌")
+            elif ev["type"] == "status":
+                if ev["label"] == "orchestrator_llm_start":
+                    label = "✍️ 답변 작성 중..." if tool_called else "🤔 요청 분석 중..."
+                else:
+                    label = ev["label"]
+                status.update(label=label, state="running", expanded=False)
+                _start_step(label)
             elif ev["type"] == "tool_start":
-                status.update(label=_tool_label(ev["name"]), state="running", expanded=False)
-            elif ev["type"] == "tool_end":
-                status.update(label="생각 중...", state="running", expanded=False)
+                tool_called = True
+                name = ev["name"]
+                if name == "task":
+                    subagent = ev.get("args", {}).get("subagent_type", "")
+                    _subagent_labels = {
+                        "research": "🔍 research 서브에이전트 실행 중",
+                        "note": "📝 note 서브에이전트 실행 중",
+                        "github": "🐙 github 서브에이전트 실행 중",
+                        "code": "🐍 code 서브에이전트 실행 중",
+                        "file": "📁 file 서브에이전트 실행 중",
+                        "cron": "📬 cron 서브에이전트 실행 중",
+                    }
+                    label = _subagent_labels.get(subagent, "🤖 서브에이전트 실행 중")
+                else:
+                    label = _tool_label(name)
+                status.update(label=label, state="running", expanded=False)
+                _start_step(label)
             elif ev["type"] == "usage":
                 session_tokens["input"] += ev["input_tokens"]
                 session_tokens["output"] += ev["output_tokens"]
 
-        status.update(label="완료", state="complete", expanded=False)
+        # 마지막 단계 완료 시간 기록
+        if step_placeholder is not None:
+            step_elapsed = int(time.time() - step_start)
+            step_placeholder.caption(f"{step_label} — {step_elapsed}초")
+
+        elapsed = int(time.time() - start_time)
+        status.update(label=f"완료 ({elapsed}초)", state="complete", expanded=False)
+        timer_box.empty()
         text_box.markdown(full_response)
 
         # 이번 응답 토큰 표시
