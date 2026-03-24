@@ -64,6 +64,7 @@ class AgentLoggingHandler(BaseCallbackHandler):
         **kwargs: Any,
     ) -> None:
         model_name = (serialized or {}).get("kwargs", {}).get("model_name", "unknown")
+        agent_name = kwargs.get("name") or "orchestrator"
         self._start_times[str(run_id)] = time.perf_counter()
 
         # 마지막 사용자 메시지만 요약 (str / BaseMessage 모두 처리)
@@ -72,7 +73,7 @@ class AgentLoggingHandler(BaseCallbackHandler):
             last = messages[0][-1]
             last_msg = str(getattr(last, "content", last))[:200]
 
-        agent_logger.info("LLM 호출 | 모델: %s | 입력: %s", model_name, last_msg)
+        agent_logger.info("LLM 호출 | 에이전트: %s | 모델: %s | 입력: %s", agent_name, model_name, last_msg)
 
     def on_llm_end(
         self,
@@ -158,8 +159,9 @@ class AgentLoggingHandler(BaseCallbackHandler):
         **kwargs: Any,
     ) -> None:
         tool_name = serialized.get("name", "unknown")
+        agent_name = kwargs.get("name") or "orchestrator"
         self._start_times[f"tool_{run_id}"] = time.perf_counter()
-        agent_logger.info("툴 실행 | %s | 입력: %s", tool_name, input_str[:200])
+        agent_logger.info("툴 실행 | 에이전트: %s | %s | 입력: %s", agent_name, tool_name, input_str[:200])
 
     def on_tool_end(
         self,
