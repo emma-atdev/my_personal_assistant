@@ -1,25 +1,10 @@
 """파일 서브에이전트 — 로컬 MCP 서버를 통한 파일 접근 전담."""
 
-from pathlib import Path
-
-import yaml
 from langchain.chat_models import init_chat_model
 
 from tools.local_file import list_local_files, read_local_file
 
-_CONFIG_PATH = Path(__file__).parent.parent.parent / "mcp_server" / "config.yaml"
-
-
-def _allowed_dirs_str() -> str:
-    """config.yaml에서 허용 디렉토리 목록을 읽어 문자열로 반환한다."""
-    try:
-        config = yaml.safe_load(_CONFIG_PATH.read_text(encoding="utf-8"))
-        entries = config.get("allowed_directories", [])
-        paths = [e["path"] for e in entries if isinstance(e, dict) and "path" in e]
-        return ", ".join(paths) if paths else "~/my_personal_assistant"
-    except Exception:  # noqa: BLE001
-        return "~/my_personal_assistant"
-
+from utils.mcp_config import allowed_dirs_str as _allowed_dirs_str
 
 _allowed = _allowed_dirs_str()
 

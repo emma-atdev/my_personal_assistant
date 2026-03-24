@@ -11,6 +11,7 @@ from langgraph.graph.state import CompiledStateGraph
 from agent.subagents.code import CODE_SUBAGENT
 from agent.subagents.cron import CRON_SUBAGENT
 from agent.subagents.file import FILE_SUBAGENT
+from utils.mcp_config import allowed_dirs_str as _allowed_dirs_str
 from agent.subagents.github import GITHUB_SUBAGENT
 from agent.subagents.note import NOTE_SUBAGENT
 from agent.subagents.research import RESEARCH_SUBAGENT
@@ -38,6 +39,8 @@ LLM 전문 AI 개발자의 개인 비서입니다.
 - file: 로컬 파일 읽기, 디렉토리 탐색 (MCP 필요)
   — 파일/디렉토리 관련 작업은 예외 없이 file 서브에이전트에 위임
   — ls, read_file 등 내장 툴 직접 호출 금지 (로컬 파일시스템에 연결되지 않음)
+  — 접근 가능한 경로: {mcp_allowed_dirs} (이 경로만 허용됨)
+  — task description에 반드시 이 경로를 명시할 것. "/" 또는 "루트" 기준 탐색 지시 금지
 - cron: 브리핑 생성, 리포트 작성
 - code: Python 코드 실행, 수학 계산, 데이터 분석
   — 사용자가 "실행", "돌려봐", "계산해줘", "결과 확인" 등 실제 실행을 명시적으로 요청하면 반드시 code 서브에이전트 호출
@@ -187,6 +190,7 @@ def create_orchestrator(
     system_prompt = _SYSTEM_PROMPT_TEMPLATE.format(
         assistant_name=assistant_name,
         today=date.today().strftime("%Y년 %m월 %d일"),
+        mcp_allowed_dirs=_allowed_dirs_str(),
     )
     checkpointer = _get_checkpointer()
 
