@@ -1,4 +1,4 @@
-"""데이터베이스 연결 추상화 — 로컬: SQLite, Railway: PostgreSQL."""
+"""데이터베이스 연결 추상화 — 로컬, Neon: PostgreSQL (로컬 SQLite 가능)."""
 
 import os
 import sqlite3
@@ -46,7 +46,7 @@ def _init_tables_pg(conn: Any) -> None:
         cur.execute("""
             CREATE TABLE IF NOT EXISTS conversations (
                 thread_id  TEXT PRIMARY KEY,
-                title      TEXT NOT NULL DEFAULT '새 대화',
+                title      TEXT NOT NULL DEFAULT '새 채팅',
                 created_at TIMESTAMP DEFAULT NOW(),
                 updated_at TIMESTAMP DEFAULT NOW(),
                 metadata   TEXT NOT NULL DEFAULT '{}'
