@@ -1,6 +1,5 @@
 """메인 Orchestrator 에이전트 설정."""
 
-import asyncio
 import os
 
 from deepagents import create_deep_agent
@@ -105,59 +104,37 @@ HITL_TOOLS: dict[str, bool] = {
 
 
 _checkpointer: MemorySaver | None = None
-_backend_loop: asyncio.AbstractEventLoop | None = None
 
 
-def get_backend_loop() -> asyncio.AbstractEventLoop:
-    """앱 생애주기 동안 유지되는 단일 백그라운드 이벤트 루프를 반환한다."""
-    import threading
-
-    global _backend_loop
-    if _backend_loop is not None and _backend_loop.is_running():
-        return _backend_loop
-
-    _backend_loop = asyncio.new_event_loop()
-    loop = _backend_loop
-
-    def _run() -> None:
-        asyncio.set_event_loop(loop)
-        loop.run_forever()
-
-    t = threading.Thread(target=_run, daemon=True)
-    t.start()
-    return _backend_loop
-
-
-def _get_checkpointer() -> MemorySaver:
-    """체크포인터를 싱글턴으로 반환한다. DATABASE_URL 설정 시 AsyncPostgresSaver 사용."""
+async def init_checkpointer() -> None:
+    """FastAPI lifespan에서 호출 — DATABASE_URL이 있으면 AsyncPostgresSaver, 없으면 MemorySaver."""
     global _checkpointer
     if _checkpointer is not None:
-        return _checkpointer
+        return
 
     if os.getenv("DATABASE_URL"):
         from langgraph.checkpoint.postgres.aio import AsyncPostgresSaver
         from psycopg_pool import AsyncConnectionPool
 
-        loop = get_backend_loop()
-
-        async def _init() -> AsyncPostgresSaver:
-            pool = AsyncConnectionPool(
-                conninfo=os.environ["DATABASE_URL"],
-                max_size=10,
-                kwargs={"autocommit": True, "prepare_threshold": 0},
-                open=False,
-            )
-            await pool.open()
-            cp = AsyncPostgresSaver(pool)  # type: ignore[arg-type]
-            await cp.setup()
-            return cp
-
-        future = asyncio.run_coroutine_threadsafe(_init(), loop)
-        _checkpointer = future.result(timeout=30)  # type: ignore[assignment]
+        pool = AsyncConnectionPool(
+            conninfo=os.environ["DATABASE_URL"],
+            max_size=10,
+            kwargs={"autocommit": True, "prepare_threshold": 0},
+            open=False,
+        )
+        await pool.open()
+        cp = AsyncPostgresSaver(pool)  # type: ignore[arg-type]
+        await cp.setup()
+        _checkpointer = cp  # type: ignore[assignment]
     else:
         _checkpointer = MemorySaver()
 
-    assert _checkpointer is not None
+
+def _get_checkpointer() -> MemorySaver:
+    """체크포인터 싱글턴 반환 — init_checkpointer() 호출 전이면 MemorySaver로 폴백."""
+    global _checkpointer
+    if _checkpointer is None:
+        _checkpointer = MemorySaver()
     return _checkpointer
 
 

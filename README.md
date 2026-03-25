@@ -37,15 +37,15 @@
 
 ### 기술 스택
 
-| 역할 | 기술                                                                              |
-|------|---------------------------------------------------------------------------------|
-| 에이전트 | [deepagents](https://github.com/langchain-ai/deepagents) (LangChain + LangGraph) |
-| 백엔드 | FastAPI + APScheduler                                                           |
-| 프론트엔드 | Streamlit                                                                       |
-| DB | PostgreSQL (Neon) - SQLite 로컬 폴백도 가능                                            |
-| 코드 실행 | Modal Sandbox                                                                   |
-| 파일 접근 | fastmcp + ngrok                                                                 |
-| 배포 | Fly.io + Streamlit Cloud + GitHub Actions                                       |
+| 역할 | 기술                                                                                |
+|------|-----------------------------------------------------------------------------------|
+| 에이전트 | [Deepagents](https://github.com/langchain-ai/deepagents) (LangChain + LangGraph) |
+| 백엔드 | FastAPI + APScheduler                                                             |
+| 프론트엔드 | Streamlit                                                                         |
+| DB | PostgreSQL (Neon) - SQLite 로컬 폴백도 가능                                              |
+| 코드 실행 | Modal Sandbox                                                                     |
+| 파일 접근 | fastmcp + ngrok                                                                   |
+| 배포 | Fly.io + Streamlit Cloud + GitHub Actions                                         |
 
 ### 전체 구조
 

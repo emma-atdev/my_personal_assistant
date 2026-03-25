@@ -1,20 +1,19 @@
 """Streamlit 채팅 UI — 개인 비서 프론트엔드."""
 
-import asyncio
-import queue
-import threading
+import json
+import os
 import time
-from collections.abc import AsyncGenerator, Generator
+from collections.abc import Generator
 from datetime import date, datetime
 from typing import Any
 
+import httpx
 import streamlit as st
 from dotenv import load_dotenv
-from langchain_core.messages import AIMessage, HumanMessage
 
-load_dotenv()  # .env 로드 후 에이전트 임포트
+load_dotenv()
 
-from agent.orchestrator import create_orchestrator, get_backend_loop  # noqa: E402
+BACKEND_URL = os.getenv("BACKEND_URL", "http://localhost:8000")
 
 st.set_page_config(page_title="개인 비서", page_icon="🤖", layout="wide")
 
@@ -70,48 +69,21 @@ def _tool_label(name: str) -> str:
 # ── 세션 초기화 ───────────────────────────────────────────────
 
 
-def _load_messages_from_state() -> list[dict[str, Any]]:
-    """현재 thread의 LangGraph 상태에서 메시지를 복원한다."""
-    import asyncio
-
-    from tools.conversations import load_message_metadata
-
-    loop = get_backend_loop()
-    future = asyncio.run_coroutine_threadsafe(st.session_state.agent.aget_state(st.session_state.config), loop)
-    state = future.result(timeout=10)
-    messages = state.values.get("messages", [])
-    metadata = load_message_metadata(st.session_state.thread_id)
-
-    result: list[dict[str, Any]] = []
-    for m in messages:
-        if isinstance(m, HumanMessage):
-            result.append({"role": "user", "content": str(m.content)})
-        elif isinstance(m, AIMessage) and m.content:
-            content = m.content
-            if isinstance(content, list):
-                text = " ".join(b["text"] for b in content if isinstance(b, dict) and b.get("type") == "text")
-            else:
-                text = str(content)
-            if text:
-                idx = len(result)
-                msg_meta = metadata.get(str(idx), {})
-                result.append(
-                    {
-                        "role": "assistant",
-                        "content": text,
-                        "elapsed": msg_meta.get("elapsed", 0),
-                        "steps": msg_meta.get("steps", []),
-                    }
-                )
-    return result
+def _load_messages_from_api(thread_id: str) -> list[dict[str, Any]]:
+    """백엔드 API로 대화 히스토리를 복원한다."""
+    try:
+        resp = httpx.get(f"{BACKEND_URL}/api/chat/messages/{thread_id}", timeout=10)
+        resp.raise_for_status()
+        data: list[dict[str, Any]] = resp.json().get("messages", [])
+        return data
+    except Exception:
+        return []
 
 
 def _switch_conversation(thread_id: str) -> None:
     """thread_id로 대화를 전환하고 메시지를 복원한다."""
-    _, config = create_orchestrator(thread_id=thread_id)
-    st.session_state.config = config
     st.session_state.thread_id = thread_id
-    st.session_state.messages = _load_messages_from_state()
+    st.session_state.messages = _load_messages_from_api(thread_id)
     st.session_state.total_tokens = {"input": 0, "output": 0}
 
 
@@ -120,7 +92,6 @@ def _init_session() -> None:
 
     if "thread_id" not in st.session_state:
         convs = list_conversations(limit=20)
-        # 제목이 있는 대화 우선, 없으면 '새 채팅' 사용, 없으면 생성
         real = [c for c in convs if c["title"] != "새 채팅"]
         if real:
             thread_id = real[0]["thread_id"]
@@ -130,13 +101,8 @@ def _init_session() -> None:
             thread_id = create_conversation("새 채팅")
         st.session_state.thread_id = thread_id
 
-    if "agent" not in st.session_state or "config" not in st.session_state:
-        agent, config = create_orchestrator(thread_id=st.session_state.thread_id)
-        st.session_state.agent = agent
-        st.session_state.config = config
-
     if "messages" not in st.session_state:
-        st.session_state.messages = _load_messages_from_state()
+        st.session_state.messages = _load_messages_from_api(st.session_state.thread_id)
     if "quick_input" not in st.session_state:
         st.session_state.quick_input = ""
     if "total_tokens" not in st.session_state:
@@ -178,106 +144,28 @@ def _init_session() -> None:
         except Exception:
             st.session_state.this_week_report = None
     if "conv_renaming" not in st.session_state:
-        st.session_state.conv_renaming = None  # 이름 수정 중인 thread_id
+        st.session_state.conv_renaming = None
 
 
 # ── 이벤트 스트리밍 ───────────────────────────────────────────
 
 
-async def _stream_events(agent: Any, config: Any, user_input: str) -> AsyncGenerator[dict[str, Any]]:
-    """에이전트 이벤트를 스트리밍한다."""
-    async for event in agent.astream_events(
-        {"messages": [HumanMessage(content=user_input)]},
-        config,
-        version="v2",
-    ):
-        etype = event["event"]
-
-        if etype == "on_chat_model_start":
-            metadata = event.get("metadata", {})
-            ns = metadata.get("checkpoint_ns", "")
-            if ns.startswith("tools:"):
-                yield {"type": "status", "label": "서브에이전트에서 분석 중입니다."}
-            else:
-                yield {"type": "status", "label": "orchestrator_llm_start"}
-
-        elif etype == "on_chat_model_stream":
-            # 서브에이전트 출력 제외 — 서브에이전트는 checkpoint_ns가 'tools:'로 시작
-            metadata = event.get("metadata", {})
-            if metadata.get("checkpoint_ns", "").startswith("tools:"):
-                continue
-            chunk = event["data"].get("chunk")
-            if not chunk or not hasattr(chunk, "content"):
-                continue
-            content = chunk.content
-            if isinstance(content, str) and content:
-                yield {"type": "token", "text": content}
-            elif isinstance(content, list):
-                for block in content:
-                    if isinstance(block, dict) and block.get("type") == "text":
-                        text = block.get("text", "")
-                        if text:
-                            yield {"type": "token", "text": text}
-
-        elif etype == "on_tool_start":
-            name = event.get("name", "")
-            args = event.get("data", {}).get("input", {}) if name == "task" else {}
-            yield {"type": "tool_start", "name": name, "args": args}
-
-        elif etype == "on_tool_end":
-            yield {"type": "tool_end", "name": event.get("name", "")}
-
-        elif etype == "on_chat_model_end":
-            output = event["data"].get("output")
-            if output and hasattr(output, "usage_metadata") and output.usage_metadata:
-                usage = output.usage_metadata
-                # usage_metadata는 dict 또는 UsageMetadata 객체일 수 있음
-                if isinstance(usage, dict):
-                    input_t = usage.get("input_tokens", 0)
-                    output_t = usage.get("output_tokens", 0)
-                else:
-                    input_t = getattr(usage, "input_tokens", 0)
-                    output_t = getattr(usage, "output_tokens", 0)
-                yield {"type": "usage", "input_tokens": input_t, "output_tokens": output_t}
-
-
-def _run_events(user_input: str) -> Generator[dict[str, Any]]:
-    """async 이벤트 스트리밍을 sync generator로 변환한다."""
-    agent = st.session_state.agent
-    config = st.session_state.config
-    event_queue: queue.Queue[dict[str, Any] | None] = queue.Queue()
-    loop = get_backend_loop()
-
-    async def _producer() -> None:
-        import traceback
-
-        try:
-            async for ev in _stream_events(agent, config, user_input):
-                event_queue.put(ev)
-        except Exception as e:  # noqa: BLE001
-            msg = traceback.format_exc() or f"{type(e).__name__}: {e!r}"
-            event_queue.put({"type": "error", "message": msg})
-        finally:
-            event_queue.put(None)
-
-    asyncio.run_coroutine_threadsafe(_producer(), loop)
-
-    stop_tick = threading.Event()
-
-    def _ticker() -> None:
-        while not stop_tick.is_set():
-            time.sleep(0.5)
-            event_queue.put({"type": "tick"})
-
-    tick_thread = threading.Thread(target=_ticker, daemon=True)
-    tick_thread.start()
-
-    while True:
-        ev = event_queue.get()
-        if ev is None:
-            stop_tick.set()
-            break
-        yield ev
+def _run_events(thread_id: str, user_input: str) -> Generator[dict[str, Any]]:
+    """백엔드 SSE 스트림을 동기 generator로 소비한다."""
+    with httpx.Client(timeout=None) as client:
+        with client.stream(
+            "POST",
+            f"{BACKEND_URL}/api/chat",
+            json={"thread_id": thread_id, "message": user_input},
+        ) as response:
+            for line in response.iter_lines():
+                if line.startswith("data: "):
+                    payload = line[6:]
+                    if payload:
+                        try:
+                            yield json.loads(payload)
+                        except json.JSONDecodeError:
+                            pass
 
 
 # ── HITL ─────────────────────────────────────────────────────
@@ -325,137 +213,44 @@ def _hitl_dialog(tool_name: str, tool_args: dict[str, Any]) -> None:
 
 
 def _handle_hitl() -> None:
-    loop = get_backend_loop()
-    future = asyncio.run_coroutine_threadsafe(st.session_state.agent.aget_state(st.session_state.config), loop)
-    state = future.result(timeout=10)
-    if not state.next:
-        st.session_state.pop("hitl_pending", None)
-        return
-
-    # 마지막 AIMessage의 tool_calls에서 도구명·인수·call_id 추출
-    messages = state.values.get("messages", [])
-    tool_name = "알 수 없는 작업"
-    tool_args: dict[str, Any] = {}
-    tool_call_id: str = ""
-    if messages:
-        last_msg = messages[-1]
-        tool_calls = getattr(last_msg, "tool_calls", [])
-        if tool_calls:
-            tc = tool_calls[0]
-            if isinstance(tc, dict):
-                tool_name = tc.get("name", tool_name)
-                tool_args = tc.get("args", {})
-                tool_call_id = tc.get("id", "") or tc.get("call_id", "")
-            else:
-                tool_name = getattr(tc, "name", tool_name)
-                tool_args = getattr(tc, "args", {})
-                tool_call_id = getattr(tc, "id", "")
-
+    """HITL 대화상자를 표시하거나 확인/취소 결과를 백엔드로 전송한다."""
     if "hitl_confirmed" not in st.session_state:
-        st.session_state.hitl_pending = True
-        st.session_state.hitl_tool_name = tool_name
-        st.session_state.hitl_tool_args = tool_args
-        st.session_state.hitl_tool_call_id = tool_call_id
-        _hitl_dialog(tool_name, tool_args)
+        _hitl_dialog(st.session_state.hitl_tool_name, st.session_state.hitl_tool_args)
         return
 
     confirmed = st.session_state.pop("hitl_confirmed")
-    tool_name = st.session_state.pop("hitl_tool_name", tool_name)
-    tool_args = st.session_state.pop("hitl_tool_args", tool_args)
-    tool_call_id = st.session_state.pop("hitl_tool_call_id", tool_call_id)
+    tool_name = st.session_state.pop("hitl_tool_name", "")
+    tool_args = st.session_state.pop("hitl_tool_args", {})
+    tool_call_id = st.session_state.pop("hitl_tool_call_id", "")
     st.session_state.pop("hitl_pending", None)
 
-    if confirmed:
-        try:
-            from langchain_core.messages import ToolMessage
+    try:
+        resp = httpx.post(
+            f"{BACKEND_URL}/api/chat/resume",
+            json={
+                "thread_id": st.session_state.thread_id,
+                "confirmed": confirmed,
+                "tool_name": tool_name,
+                "tool_args": tool_args,
+                "tool_call_id": tool_call_id,
+            },
+            timeout=60,
+        )
+        resp.raise_for_status()
+        response = resp.json().get("response", "완료됐습니다.")
+        st.session_state.messages.append({"role": "assistant", "content": response, "elapsed": 0, "steps": []})
+    except Exception:
+        import traceback
 
-            # edit_file / write_file: deepagents interrupt 방식 — ainvoke(None)으로 재개하면 자동 실행
-            _DEEPAGENTS_RESUME_TOOLS = {"edit_file", "write_file"}
-
-            if tool_name not in _DEEPAGENTS_RESUME_TOOLS:
-                # 직접 실행 후 ToolMessage 주입
-                from tools.calendar_tools import create_event as _create_event
-                from tools.notion_tools import create_notion_page as _create_notion_page
-
-                _HITL_TOOL_MAP: dict[str, Any] = {
-                    "create_event": lambda a: _create_event(**a),
-                    "create_notion_page": lambda a: _create_notion_page(**a),
-                }
-                if tool_name in _HITL_TOOL_MAP:
-                    tool_result = _HITL_TOOL_MAP[tool_name](tool_args)
-                else:
-                    tool_result = f"{tool_name} 실행됨"
-                tool_msg = ToolMessage(content=str(tool_result), tool_call_id=tool_call_id)
-                update_future = asyncio.run_coroutine_threadsafe(
-                    st.session_state.agent.aupdate_state(st.session_state.config, {"messages": [tool_msg]}),
-                    loop,
-                )
-                update_future.result(timeout=10)  # 실패 시 여기서 예외 발생 → except로 이동
-
-            # 에이전트 재개 (edit_file/write_file은 여기서 deepagents가 직접 실행)
-            resume_future = asyncio.run_coroutine_threadsafe(
-                st.session_state.agent.ainvoke(None, st.session_state.config), loop
-            )
-            result = resume_future.result(timeout=60)
-            all_messages = result.get("messages", [])
-            response = _extract_text(all_messages)
-
-            # 캘린더 링크 보완
-            cal_link = ""
-            if "google.com/calendar" in tool_result:
-                for part in tool_result.split():
-                    if "google.com/calendar" in part:
-                        cal_link = part.strip("()")
-                        break
-            if cal_link and cal_link not in response:
-                response = f"{response}\n[📅 캘린더에서 보기]({cal_link})"
-
-            st.session_state.messages.append(
-                {"role": "assistant", "content": response or tool_result, "elapsed": 0, "steps": []}
-            )
-        except Exception:
-            import traceback
-
+        if confirmed:
             st.session_state.messages.append(
                 {"role": "assistant", "content": f"오류: {traceback.format_exc()}", "elapsed": 0, "steps": []}
             )
-    else:
-        # 취소 시 ToolMessage 주입 후 에이전트 재개 (edit_file/write_file 포함 모든 HITL 툴)
-        try:
-            from langchain_core.messages import ToolMessage
-
-            cancel_msg = ToolMessage(content="사용자가 작업을 취소했습니다.", tool_call_id=tool_call_id)
-            update_future = asyncio.run_coroutine_threadsafe(
-                st.session_state.agent.aupdate_state(st.session_state.config, {"messages": [cancel_msg]}),
-                loop,
-            )
-            update_future.result(timeout=10)
-            resume_future = asyncio.run_coroutine_threadsafe(
-                st.session_state.agent.ainvoke(None, st.session_state.config), loop
-            )
-            result = resume_future.result(timeout=60)
-            all_messages = result.get("messages", [])
-            response = _extract_text(all_messages)
-            st.session_state.messages.append(
-                {"role": "assistant", "content": response or "작업이 취소됐습니다.", "elapsed": 0, "steps": []}
-            )
-        except Exception:
+        else:
             st.session_state.messages.append(
                 {"role": "assistant", "content": "작업이 취소됐습니다.", "elapsed": 0, "steps": []}
             )
     st.rerun()
-
-
-def _extract_text(messages: list[object]) -> str:
-    for m in reversed(messages):
-        if isinstance(m, AIMessage) and m.content:
-            content = m.content
-            if isinstance(content, list):
-                return " ".join(
-                    block["text"] for block in content if isinstance(block, dict) and block.get("type") == "text"
-                )
-            return str(content)
-    return ""
 
 
 # ── 사용자 입력 처리 ──────────────────────────────────────────
@@ -477,7 +272,6 @@ def _handle_user_input(user_input: str) -> None:
         start_time = time.time()
         tool_called = False
 
-        # 단계별 소요 시간 추적
         step_placeholder: Any = None
         step_label: str = ""
         step_start: float = 0.0
@@ -485,7 +279,6 @@ def _handle_user_input(user_input: str) -> None:
 
         def _start_step(label: str) -> None:
             nonlocal step_placeholder, step_label, step_start
-            # 이전 단계 완료 시간 기록
             if step_placeholder is not None:
                 step_elapsed = int(time.time() - step_start)
                 step_placeholder.caption(f"{step_label} — {step_elapsed}초")
@@ -496,11 +289,17 @@ def _handle_user_input(user_input: str) -> None:
                 step_placeholder = st.empty()
                 step_placeholder.caption(label)
 
-        for ev in _run_events(user_input):
+        for ev in _run_events(st.session_state.thread_id, user_input):
             elapsed = int(time.time() - start_time)
             timer_box.caption(f"⏱ {elapsed}초 경과")
-            if ev["type"] == "tick":
-                continue
+            if ev["type"] == "done":
+                break
+            elif ev["type"] == "hitl":
+                st.session_state.hitl_pending = True
+                st.session_state.hitl_tool_name = ev["tool_name"]
+                st.session_state.hitl_tool_args = ev["tool_args"]
+                st.session_state.hitl_tool_call_id = ev["tool_call_id"]
+                break
             elif ev["type"] == "error":
                 st.error(f"오류: {ev['message']}")
                 break
@@ -536,7 +335,6 @@ def _handle_user_input(user_input: str) -> None:
                 session_tokens["input"] += ev["input_tokens"]
                 session_tokens["output"] += ev["output_tokens"]
 
-        # 마지막 단계 완료 시간 기록
         if step_placeholder is not None:
             step_elapsed = int(time.time() - step_start)
             step_placeholder.caption(f"{step_label} — {step_elapsed}초")
@@ -547,36 +345,31 @@ def _handle_user_input(user_input: str) -> None:
         timer_box.empty()
         text_box.markdown(full_response)
 
-        # 이번 응답 토큰 표시
         total = session_tokens["input"] + session_tokens["output"]
         if total > 0:
             st.caption(f"↑ {session_tokens['input']:,} · ↓ {session_tokens['output']:,} 토큰")
             st.session_state.total_tokens["input"] += session_tokens["input"]
             st.session_state.total_tokens["output"] += session_tokens["output"]
 
-    st.session_state.messages.append(
-        {"role": "assistant", "content": full_response, "elapsed": elapsed, "steps": steps}
-    )
+    if full_response:
+        st.session_state.messages.append(
+            {"role": "assistant", "content": full_response, "elapsed": elapsed, "steps": steps}
+        )
 
-    # steps/elapsed를 conversations metadata에 저장
-    from tools.conversations import save_message_metadata
+        from tools.conversations import save_message_metadata
 
-    msg_index = len(st.session_state.messages) - 1
-    save_message_metadata(st.session_state.thread_id, msg_index, elapsed, steps)
+        msg_index = len(st.session_state.messages) - 1
+        save_message_metadata(st.session_state.thread_id, msg_index, elapsed, steps)
 
-    # 첫 메시지면 대화 제목 자동 설정
-    if len(st.session_state.messages) == 2:  # user + assistant
+    if len(st.session_state.messages) == 2:
         from tools.conversations import update_conversation_title
 
         title = user_input[:30] + ("..." if len(user_input) > 30 else "")
         update_conversation_title(st.session_state.thread_id, title)
 
-    # 대화 updated_at 갱신
     from tools.conversations import touch_conversation
 
     touch_conversation(st.session_state.thread_id)
-
-    _handle_hitl()
 
 
 # ── 내보내기 ──────────────────────────────────────────────────
@@ -734,7 +527,6 @@ def main() -> None:
                                 _switch_conversation(new_id)
                         st.rerun()
 
-            # 이름 수정 인라인 폼
             if st.session_state.conv_renaming == tid:
                 new_title = st.text_input(
                     "새 이름", value=title, key=f"rename_input_{tid}", label_visibility="collapsed"
@@ -836,7 +628,6 @@ def main() -> None:
             if msg["role"] == "assistant" and msg.get("elapsed") and not msg.get("steps"):
                 st.caption(f"완료 ({msg['elapsed']}초)")
 
-    # 빠른 실행 버튼 쿼리 처리
     if st.session_state.quick_input:
         user_input = st.session_state.quick_input
         st.session_state.quick_input = ""
