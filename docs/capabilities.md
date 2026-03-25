@@ -20,7 +20,6 @@
 | 최신 AI 논문 브리핑해줘 |
 | HuggingFace 오늘 인기 논문 알려줘 |
 | ArXiv에서 MoE 관련 논문 찾아줘 |
-| Papers with Code 트렌딩 논문 보여줘 |
 | reasoning 관련 논문 3개 요약해줘 |
 
 ---

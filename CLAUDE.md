@@ -52,7 +52,8 @@ APScheduler: 매일 10:00 논문 브리핑, 매주 금요일 17:00 주간 리포
 - 환경 변수 하드코딩 금지 → `.env`에서만 로드
 - MCP 서버 허용 디렉토리(`mcp_server/config.yaml`) 외 경로 절대 노출 금지
 - 백그라운드 작업 완료 시 WebSocket으로 채팅창에 자동 푸시
-- HITL 필수 액션 (실행 전 사용자 확인): `edit_file`, `write_file`, `execute`, 로컬 MCP 쓰기
+- HITL 필수 액션 (실행 전 사용자 확인): `edit_file`, `write_file`, `execute` (Modal Sandbox 내 파일 조작)
+- MCP 서버는 읽기 전용 (`/files/read`, `/files/list`만 구현) — 로컬 파일 쓰기 엔드포인트 없음
 - HITL 불필요 액션 (자동 실행): 웹 검색, 논문 수집, 메모 저장/조회
 
 ## 환경 변수 (.env)
