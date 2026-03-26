@@ -80,6 +80,8 @@ LangGraph 위에서 동작하는 추상화 레이어. `create_deep_agent()` 한 
 **Q. checkpointer가 두 종류인 이유는?**
 로컬은 `MemorySaver`(인메모리, 재시작 시 초기화), 프로덕션은 `AsyncPostgresSaver`(Neon PostgreSQL, 영구 유지). `DATABASE_URL` 환경변수 유무로 자동 분기. dev/prod 환경에서 동일한 코드 사용.
 
+초기화는 `async def init_checkpointer()`로 분리되어 FastAPI lifespan에서 서버 시작 시 한 번 호출됨. 이전의 threading 기반 초기화(`get_backend_loop()`)는 FastAPI가 natively async이므로 제거.
+
 ---
 
 ## OpenClaw × deepagents 기능 구현 현황
@@ -128,6 +130,52 @@ HITL(파괴적 작업 전 확인), MCP로 로컬 맥북 파일 접근, Modal San
 | HITL 취소·중단 시 dangling tool call | HITL 취소나 에이전트 중단 시 tool call이 응답 없이 대화 히스토리에 남아 다음 요청에서 오류 유발 가능 | 자동 패치 | `create_deep_agent(middleware=[PatchToolCallsMiddleware()])` — deepagents 내장 미들웨어 |
 | 에이전트 평가 | 없음 | LLM 응답 품질 추적 | LangSmith 연동 |
 | 프론트 UX | 기본 Streamlit UI | 채팅 디자인, 서브에이전트 진행 상태 시각화 | Streamlit custom components 또는 Next.js 전환 |
+
+---
+
+## backend/app.py
+
+**Q. Streamlit이 에이전트를 직접 임포트하지 않는 이유는?**
+리팩토링 후 Streamlit은 에이전트를 전혀 모름 — `httpx`로 FastAPI 엔드포인트만 호출. 에이전트 초기화·실행·checkpointer 관리 전부 백엔드에서. 이전에는 `create_orchestrator()`를 Streamlit에서 직접 호출하고 `asyncio`/`threading`으로 async 코드를 sync로 변환했음.
+
+| 항목 | 기존 (앱 기반) | 현재 (API 기반) |
+|------|--------------|----------------|
+| 에이전트 실행 위치 | Streamlit 프로세스 내 | FastAPI 백엔드 |
+| 스트리밍 | asyncio + Queue → sync | httpx SSE |
+| HITL 처리 | `aget_state` / `aupdate_state` 직접 호출 | `POST /api/chat/resume` |
+
+**Q. 새로 추가된 엔드포인트가 뭐예요?**
+
+| 엔드포인트 | 역할 |
+|-----------|------|
+| `POST /api/chat` | 사용자 메시지 → SSE 스트리밍 (token·status·tool\_start·hitl·done 이벤트) |
+| `POST /api/chat/resume` | HITL 확인/취소 후 에이전트 재개, 응답 반환 |
+| `GET /api/chat/messages/{thread_id}` | 페이지 새로고침 시 대화 히스토리 복원 |
+
+**Q. SSE 스트림에 어떤 이벤트가 있어요?**
+
+| 이벤트 type | 의미 |
+|------------|------|
+| `token` | 응답 텍스트 청크 |
+| `status` | "분석 중", "서브에이전트 실행 중" 등 상태 레이블 |
+| `tool_start` / `tool_end` | 툴 호출 시작/완료 |
+| `usage` | 토큰 사용량 |
+| `hitl` | 사용자 확인 필요 (tool_name, tool_args, tool_call_id 포함) |
+| `done` | 스트림 종료 |
+| `error` | 오류 발생 |
+
+**Q. HITL 흐름이 어떻게 돼요?**
+```
+① POST /api/chat 스트리밍 중 에이전트가 create_event 호출 시도
+② LangGraph 그래프 일시정지 → SSE에 hitl 이벤트 전송
+③ Streamlit이 hitl 이벤트 수신 → session_state에 저장 → 다이얼로그 표시
+④ 사용자 승인 클릭 → POST /api/chat/resume {confirmed: true, tool_name, tool_args, tool_call_id}
+   → 백엔드에서 툴 직접 실행 → ToolMessage 주입 → ainvoke(None) 재개
+⑤ 사용자 취소 클릭 → POST /api/chat/resume {confirmed: false}
+   → ToolMessage("취소됨") 주입 → ainvoke(None) 재개
+```
+
+`edit_file` / `write_file`은 deepagents가 직접 처리하므로 `ainvoke(None)`만 호출하면 내부적으로 실행됨. `create_event` / `create_notion_page`는 백엔드가 직접 실행 후 ToolMessage 주입.
 
 ---
 
@@ -247,6 +295,20 @@ deepagents가 모든 에이전트에 `ls`, `glob`, `read_file` 등을 자동 제
 ---
 
 ## 프론트엔드 — Streamlit 선택 이유
+
+**Q. Streamlit에서 에이전트를 어떻게 호출해요?**
+`httpx`로 FastAPI 엔드포인트를 동기 호출. `_run_events(thread_id, user_input)`가 `POST /api/chat`에 SSE 스트리밍 요청을 보내고, 줄 단위로 파싱해서 Generator로 반환. `asyncio`/`threading` 없이 순수 동기 코드.
+
+```python
+def _run_events(thread_id, user_input):
+    with httpx.Client(timeout=None) as client:
+        with client.stream("POST", f"{BACKEND_URL}/api/chat", ...) as response:
+            for line in response.iter_lines():
+                if line.startswith("data: "):
+                    yield json.loads(line[6:])
+```
+
+`BACKEND_URL`은 `.env`에서 로드 — 로컬은 `http://localhost:8000`, 배포 시 `https://mpa-jm.fly.dev`.
 
 **Q. 왜 Telegram 같은 봇 대신 웹 UI를 만들었어요?**
 텔레그램 봇은 채팅창 하나만 있는 구조라 아래 기능을 넣기 어려움:

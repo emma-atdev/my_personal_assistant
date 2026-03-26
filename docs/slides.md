@@ -78,7 +78,9 @@
   │
   ▼
 Streamlit Cloud (프론트엔드)
-  │  HTTP
+  │  POST /api/chat          → SSE 스트리밍 (token·status·hitl 이벤트)
+  │  POST /api/chat/resume   → HITL 확인/취소
+  │  GET  /api/chat/messages → 대화 히스토리 복원
   ▼
 FastAPI 백엔드 (Fly.io)
   │
@@ -265,9 +267,12 @@ HITL_TOOLS = {
 ```
 에이전트가 create_event 호출 시도
   → LangGraph 그래프 실행 일시정지
+  → POST /api/chat SSE에 hitl 이벤트 전송
   → Streamlit에 "승인 / 취소" 버튼 표시
-  → 승인: ainvoke(None) 으로 재개
-  → 취소: ToolMessage("취소됨") 주입 후 재개
+  → 승인: POST /api/chat/resume {confirmed: true}
+       → ToolMessage(결과) 주입 → ainvoke(None) 재개
+  → 취소: POST /api/chat/resume {confirmed: false}
+       → ToolMessage("취소됨") 주입 → ainvoke(None) 재개
 ```
 
 > "읽기는 자동, 쓰기는 확인" 원칙

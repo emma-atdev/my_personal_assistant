@@ -52,7 +52,7 @@
 ```mermaid
 graph TD
     User([사용자]) --> Streamlit[Streamlit Cloud\n프론트엔드]
-    Streamlit -->|HTTP / WebSocket| FastAPI[FastAPI 백엔드\nFly.io]
+    Streamlit -->|SSE · REST · WebSocket| FastAPI[FastAPI 백엔드\nFly.io]
     FastAPI --> Orchestrator
 
     subgraph Agent["deepagents — Orchestrator-Subagent"]
@@ -141,11 +141,11 @@ uv sync
 cp .env.example .env
 # .env 파일에 API 키 입력
 
-# 프론트엔드 (채팅만 필요하면 이것만)
-uv run streamlit run frontend/app.py --server.port 8001
-
-# 백엔드 (자동 브리핑·리포트 필요 시 추가 실행)
+# 백엔드 (필수 — 프론트엔드가 FastAPI를 통해 에이전트 호출)
 uv run uvicorn backend.app:app --reload --port 8000
+
+# 프론트엔드
+uv run streamlit run frontend/app.py --server.port 8001
 
 # MCP 서버 (로컬 파일 접근 시)
 ./scripts/start_mcp.sh
@@ -154,8 +154,8 @@ uv run uvicorn backend.app:app --reload --port 8000
 ./scripts/stop_mcp.sh
 ```
 
-> **주의**: MCP 서버는 로컬에서 실행되어야 합니다.
-> 파일 접근이 필요할 때만 실행하면 되며, 꺼져 있어도 검색·메모·논문 등 다른 기능은 정상 동작합니다.
+> **주의**: 프론트엔드는 백엔드(FastAPI)가 실행 중이어야 동작합니다.
+> MCP 서버는 로컬 파일 접근이 필요할 때만 실행하면 되며, 꺼져 있어도 검색·메모·논문 등 다른 기능은 정상 동작합니다.
 
 ---
 
@@ -179,6 +179,7 @@ uv run uvicorn backend.app:app --reload --port 8000
 | `NOTION_CHANGELOG_PAGE_ID` | | CHANGELOG 동기화할 Notion 페이지 ID |
 | `NOTION_BRIEFING_PARENT_PAGE_ID` | | 아침 브리핑 저장할 상위 페이지 ID |
 | `NOTION_REPORT_PARENT_PAGE_ID` | | 주간 리포트 저장할 상위 페이지 ID |
+| `BACKEND_URL` | | 프론트엔드 → 백엔드 연결 URL (dev: `http://localhost:8000`, prod: Fly.io URL) |
 | `ENV` | | `development` \| `production` (기본: development) |
 | `PORT` | | 백엔드 포트 (기본: 8000) |
 

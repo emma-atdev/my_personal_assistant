@@ -1,5 +1,6 @@
 """코드 실행 서브에이전트 — Modal Sandbox 백엔드 사용."""
 
+import atexit
 import warnings
 from typing import Any
 
@@ -31,8 +32,8 @@ _CODE_SYSTEM_PROMPT = (
 _MODAL_APP_NAME = "personal-assistant-sandbox"
 
 
-def _make_sandbox_factory() -> Any:
-    """샌드박스 팩토리 클로저 — 만료 시 자동 재생성."""
+def _make_sandbox_factory() -> tuple[Any, Any]:
+    """샌드박스 팩토리 클로저 — 만료 시 자동 재생성. (factory, stop) 튜플 반환."""
     _sandbox: Any = None
     _backend: Any = None
 
@@ -79,16 +80,25 @@ def _make_sandbox_factory() -> Any:
                 raise error[0]
             _sandbox = result[0]
             _backend = ModalSandbox(sandbox=_sandbox)
+            atexit.register(_stop)
 
         return _backend
 
-    return factory
+    def _stop() -> None:
+        if _sandbox is not None and _is_alive():
+            try:
+                _sandbox.stop()
+            except Exception:  # noqa: BLE001
+                pass
+
+    return factory, _stop
 
 
-def _make_code_subagent() -> CompiledSubAgent:
-    """Modal Sandbox 백엔드를 가진 코드 실행 서브에이전트를 생성한다."""
+def _make_code_subagent() -> tuple[CompiledSubAgent, Any]:
+    """Modal Sandbox 백엔드를 가진 코드 실행 서브에이전트를 생성한다. (subagent, stop) 튜플 반환."""
+    stop: Any = None
     try:
-        backend: Any = _make_sandbox_factory()
+        backend, stop = _make_sandbox_factory()
     except Exception:  # noqa: BLE001
         backend = None
 
@@ -99,7 +109,7 @@ def _make_code_subagent() -> CompiledSubAgent:
         name="code-executor",
     )
 
-    return CompiledSubAgent(
+    subagent = CompiledSubAgent(
         name="code",
         description=(
             "Python 코드 작성·실행 또는 수학 계산·데이터 분석이 필요할 때 사용. "
@@ -107,6 +117,13 @@ def _make_code_subagent() -> CompiledSubAgent:
         ),
         runnable=agent,
     )
+    return subagent, stop
 
 
-CODE_SUBAGENT = _make_code_subagent()
+CODE_SUBAGENT, _stop_sandbox = _make_code_subagent()
+
+
+def stop_sandbox() -> None:
+    """FastAPI lifespan 종료 시 Modal 샌드박스를 즉시 해제한다."""
+    if _stop_sandbox is not None:
+        _stop_sandbox()

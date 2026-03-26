@@ -16,6 +16,7 @@ from langchain_core.messages import AIMessage, HumanMessage, ToolMessage  # noqa
 from pydantic import BaseModel  # noqa: E402
 
 from agent.orchestrator import create_orchestrator, init_checkpointer  # noqa: E402
+from agent.subagents.code import stop_sandbox  # noqa: E402
 from cron.jobs.morning_briefing import run_morning_briefing  # noqa: E402
 from cron.jobs.weekly_report import run_weekly_report  # noqa: E402
 from cron.scheduler import setup_scheduler  # noqa: E402
@@ -42,6 +43,7 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None]:
     scheduler.start()
     yield
     scheduler.shutdown()
+    stop_sandbox()
 
 
 app = FastAPI(title="Personal Assistant API", lifespan=lifespan)
