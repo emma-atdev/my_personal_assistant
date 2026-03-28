@@ -17,10 +17,9 @@ from pydantic import BaseModel  # noqa: E402
 
 from agent.orchestrator import create_orchestrator, init_checkpointer  # noqa: E402
 from agent.subagents.code import stop_sandbox  # noqa: E402
-from cron.scheduler import load_user_jobs_from_db  # noqa: E402
 from cron.jobs.morning_briefing import run_morning_briefing  # noqa: E402
 from cron.jobs.weekly_report import run_weekly_report  # noqa: E402
-from cron.scheduler import setup_scheduler  # noqa: E402
+from cron.scheduler import load_user_jobs_from_db, setup_scheduler  # noqa: E402
 from tools.cost_tracker import get_cost_summary  # noqa: E402
 from tools.papers import fetch_hf_daily_papers  # noqa: E402
 

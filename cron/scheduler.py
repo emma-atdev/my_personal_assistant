@@ -33,9 +33,7 @@ def setup_scheduler() -> AsyncIOScheduler:
     return _scheduler
 
 
-def _build_trigger(
-    schedule_kind: str, schedule_expr: str, tz: str
-) -> CronTrigger | IntervalTrigger | DateTrigger:
+def _build_trigger(schedule_kind: str, schedule_expr: str, tz: str) -> CronTrigger | IntervalTrigger | DateTrigger:
     if schedule_kind == "cron":
         parts = schedule_expr.split()
         if len(parts) != 5:  # noqa: PLR2004

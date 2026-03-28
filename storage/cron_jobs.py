@@ -60,9 +60,7 @@ def increment_error(job_id: str) -> int:
             f"UPDATE cron_jobs SET consecutive_errors = consecutive_errors + 1 WHERE job_id = {PH}",
             (job_id,),
         )
-        row = con.execute(
-            f"SELECT consecutive_errors FROM cron_jobs WHERE job_id = {PH}", (job_id,)
-        ).fetchone()
+        row = con.execute(f"SELECT consecutive_errors FROM cron_jobs WHERE job_id = {PH}", (job_id,)).fetchone()
         count: int = row["consecutive_errors"] if row else 0
         if count >= _MAX_CONSECUTIVE_ERRORS:
             con.execute(f"UPDATE cron_jobs SET enabled = 0 WHERE job_id = {PH}", (job_id,))
@@ -72,6 +70,4 @@ def increment_error(job_id: str) -> int:
 def reset_errors(job_id: str) -> None:
     """연속 실패 횟수를 0으로 초기화한다."""
     with get_conn() as con:
-        con.execute(
-            f"UPDATE cron_jobs SET consecutive_errors = 0 WHERE job_id = {PH}", (job_id,)
-        )
+        con.execute(f"UPDATE cron_jobs SET consecutive_errors = 0 WHERE job_id = {PH}", (job_id,))

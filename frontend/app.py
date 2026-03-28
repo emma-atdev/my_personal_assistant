@@ -62,15 +62,18 @@ def _cron_notification_poller() -> None:
     """3초마다 크론잡 결과 큐를 확인하고 새 메시지가 있으면 채팅창에 추가한다."""
     try:
         data = _cron_queue.get_nowait()
-        st.session_state.messages.append({
-            "role": "assistant",
-            "content": f"🔔 **크론잡 알림**\n\n{data.get('message', '')}",
-            "elapsed": 0,
-            "steps": [],
-        })
+        st.session_state.messages.append(
+            {
+                "role": "assistant",
+                "content": f"🔔 **크론잡 알림**\n\n{data.get('message', '')}",
+                "elapsed": 0,
+                "steps": [],
+            }
+        )
         st.rerun(scope="app")
     except queue.Empty:
         pass
+
 
 st.set_page_config(page_title="개인 비서", page_icon="🤖", layout="wide")
 
@@ -320,6 +323,7 @@ def _handle_user_input(user_input: str) -> None:
     # 첫 메시지 시점에 제목 업데이트 — HITL 등으로 응답이 없어도 리스트에 표시되도록
     if len(st.session_state.messages) == 1:
         from tools.conversations import update_conversation_title
+
         title = user_input[:30] + ("..." if len(user_input) > 30 else "")
         update_conversation_title(st.session_state.thread_id, title)
 

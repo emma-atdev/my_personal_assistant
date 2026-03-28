@@ -42,8 +42,12 @@ def list_cron_jobs() -> str:
     from storage.cron_jobs import load_cron_jobs
 
     lines = ["**시스템 고정 잡:**"]
-    lines.append("- **morning_briefing** | 매일 오전 10시 논문·뉴스 브리핑 → Notion 저장\n  스케줄: `0 10 * * *` | ✅ 활성")
-    lines.append("- **weekly_report** | 매주 금요일 오후 5시 주간 리포트 → Notion 저장\n  스케줄: `0 17 * * 5` | ✅ 활성")
+    lines.append(
+        "- **morning_briefing** | 매일 오전 10시 논문·뉴스 브리핑 → Notion 저장\n  스케줄: `0 10 * * *` | ✅ 활성"
+    )
+    lines.append(
+        "- **weekly_report** | 매주 금요일 오후 5시 주간 리포트 → Notion 저장\n  스케줄: `0 17 * * 5` | ✅ 활성"
+    )
 
     jobs = load_cron_jobs()
     if jobs:

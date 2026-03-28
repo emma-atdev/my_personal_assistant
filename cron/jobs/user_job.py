@@ -41,13 +41,15 @@ async def run_user_job(job_id: str, task: str, timeout_seconds: int = 300) -> No
     if "[SILENT]" not in result:
         import json
 
-        from backend.app import broadcast, _connections
+        from backend.app import _connections, broadcast
+
         print(f"[user_job] broadcast 호출 — 연결된 클라이언트 수: {len(_connections)}")
         await broadcast(json.dumps({"type": "cron", "job_id": job_id, "message": result}, ensure_ascii=False))
 
     if is_one_shot:
         delete_cron_job(job_id)
         from cron.scheduler import remove_user_job
+
         remove_user_job(job_id)
         print(f"[user_job] {job_id} 단발 잡 완료 — 삭제")
 
