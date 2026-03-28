@@ -1,6 +1,8 @@
 # Changelog
 
 ## 2026-03-28
+- API  e44a69(get_cost_summary) e0c  e44a69  
+- API 비용/토큰 사용량(get_cost_summary) 조회 결과 전달
 - 사용자 요청으로 2분 뒤 단발 크론잡(테스트 실행 후 완료 메시지) 등록
 - CHANGELOG.md 내용을 Notion에 동기화(sync_changelog_to_notion) 수행
 

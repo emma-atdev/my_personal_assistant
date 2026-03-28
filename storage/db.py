@@ -56,6 +56,9 @@ def _init_tables_pg(conn: Any) -> None:
             ALTER TABLE conversations ADD COLUMN IF NOT EXISTS metadata TEXT NOT NULL DEFAULT '{}'
         """)
         cur.execute("""
+            ALTER TABLE conversations ADD COLUMN IF NOT EXISTS context_tokens INTEGER NOT NULL DEFAULT 0
+        """)
+        cur.execute("""
             CREATE TABLE IF NOT EXISTS cron_jobs (
                 job_id             TEXT PRIMARY KEY,
                 task               TEXT NOT NULL,
@@ -92,6 +95,10 @@ def _init_tables_sqlite(conn: sqlite3.Connection) -> None:
         conn.execute("ALTER TABLE conversations ADD COLUMN metadata TEXT NOT NULL DEFAULT '{}'")
     except Exception:  # noqa: BLE001
         pass  # 이미 존재하면 무시
+    try:
+        conn.execute("ALTER TABLE conversations ADD COLUMN context_tokens INTEGER NOT NULL DEFAULT 0")
+    except Exception:  # noqa: BLE001
+        pass
     conn.execute("""
         CREATE TABLE IF NOT EXISTS cost_logs (
             id            INTEGER PRIMARY KEY AUTOINCREMENT,

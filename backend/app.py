@@ -116,16 +116,21 @@ def _process_event(event: Any) -> dict[str, Any] | None:
         if output and hasattr(output, "usage_metadata") and output.usage_metadata:
             usage = output.usage_metadata
             if isinstance(usage, dict):
-                return {
-                    "type": "usage",
-                    "input_tokens": usage.get("input_tokens", 0),
-                    "output_tokens": usage.get("output_tokens", 0),
-                }
-            return {
-                "type": "usage",
-                "input_tokens": getattr(usage, "input_tokens", 0),
-                "output_tokens": getattr(usage, "output_tokens", 0),
-            }
+                inp = usage.get("input_tokens", 0)
+                out = usage.get("output_tokens", 0)
+            else:
+                inp = getattr(usage, "input_tokens", 0)
+                out = getattr(usage, "output_tokens", 0)
+            ns = event.get("metadata", {}).get("checkpoint_ns", "")
+            result: dict[str, Any] = {"type": "usage", "input_tokens": inp, "output_tokens": out}
+            if not ns.startswith("tools:"):
+                from auth.langchain_chatgpt import _PKCE_TOKENS_AVAILABLE
+
+                model_name = getattr(output, "response_metadata", {}).get("model_name", "") or ""
+                result["context_tokens"] = inp
+                result["is_pkce"] = bool(_PKCE_TOKENS_AVAILABLE)
+                result["model_name"] = model_name
+            return result
 
     return None
 
@@ -211,6 +216,10 @@ async def chat_stream(body: ChatRequest) -> StreamingResponse:
             ):
                 chunk = _process_event(event)
                 if chunk:
+                    if "context_tokens" in chunk:
+                        from tools.conversations import update_context_tokens
+
+                        update_context_tokens(body.thread_id, chunk["context_tokens"])
                     yield f"data: {json.dumps(chunk, ensure_ascii=False)}\n\n"
 
             state = await agent.aget_state(config)
@@ -295,6 +304,27 @@ async def get_messages(thread_id: str) -> dict[str, Any]:
 @app.get("/api/health")
 async def health() -> dict[str, str]:
     return {"status": "ok"}
+
+
+@app.get("/api/context-tokens/{thread_id}")
+async def get_context_tokens(thread_id: str) -> dict[str, int]:
+    """thread_id 대화의 마지막 컨텍스트 토큰 수를 반환한다."""
+    from tools.conversations import get_context_tokens as _get
+
+    return {"context_tokens": _get(thread_id)}
+
+
+@app.get("/api/auth-mode")
+async def auth_mode() -> dict[str, bool]:
+    """현재 인증 방식을 반환한다 (PKCE OAuth 여부)."""
+    try:
+        from auth.chatgpt_pkce import load_tokens
+
+        tokens = load_tokens()
+        is_pkce = bool(tokens and tokens.get("access_token"))
+    except Exception:
+        is_pkce = False
+    return {"is_pkce": is_pkce}
 
 
 @app.get("/api/costs")

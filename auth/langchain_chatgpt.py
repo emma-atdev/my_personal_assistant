@@ -203,6 +203,11 @@ class ChatGPTPKCEModel(BaseChatModel):
                 args = {}
             lc_tool_calls.append({"name": tc["name"], "args": args, "id": tc["id"], "type": "tool_call"})
 
+        if input_tokens or output_tokens:
+            from tools.cost_tracker import log_usage
+
+            log_usage(self.model_name, input_tokens, output_tokens)
+
         ai_msg = AIMessage(
             content=text,
             tool_calls=lc_tool_calls,

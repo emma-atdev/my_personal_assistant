@@ -78,6 +78,26 @@ def load_message_metadata(thread_id: str) -> dict[str, Any]:
     return dict(json.loads(row["metadata"] or "{}"))
 
 
+def update_context_tokens(thread_id: str, tokens: int) -> None:
+    """thread_id 대화의 마지막 컨텍스트 토큰 수를 저장한다."""
+    with get_conn() as conn:
+        conn.execute(
+            f"UPDATE conversations SET context_tokens={PH} WHERE thread_id={PH}",
+            (tokens, thread_id),
+        )
+
+
+def get_context_tokens(thread_id: str) -> int:
+    """thread_id 대화의 마지막 컨텍스트 토큰 수를 반환한다."""
+    with get_conn() as conn:
+        cur = conn.execute(
+            f"SELECT context_tokens FROM conversations WHERE thread_id={PH}",
+            (thread_id,),
+        )
+        row = cur.fetchone()
+    return int(row["context_tokens"]) if row else 0
+
+
 def delete_conversation(thread_id: str) -> None:
     """대화 세션과 LangGraph 체크포인트 데이터를 삭제한다."""
     from storage.db import IS_PG

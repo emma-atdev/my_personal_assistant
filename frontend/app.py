@@ -140,11 +140,23 @@ def _load_messages_from_api(thread_id: str) -> list[dict[str, Any]]:
         return []
 
 
+def _load_context_tokens(thread_id: str) -> int:
+    try:
+        import httpx as _httpx
+
+        r = _httpx.get(f"{BACKEND_URL}/api/context-tokens/{thread_id}", timeout=3)
+        return r.json().get("context_tokens", 0) if r.status_code == 200 else 0
+    except Exception:
+        return 0
+
+
 def _switch_conversation(thread_id: str) -> None:
     """thread_id로 대화를 전환하고 메시지를 복원한다."""
     st.session_state.thread_id = thread_id
     st.session_state.messages = _load_messages_from_api(thread_id)
     st.session_state.total_tokens = {"input": 0, "output": 0}
+    st.session_state.context_tokens = _load_context_tokens(thread_id)
+    st.session_state.is_pkce = False
 
 
 def _init_session() -> None:
@@ -167,6 +179,18 @@ def _init_session() -> None:
         st.session_state.quick_input = ""
     if "total_tokens" not in st.session_state:
         st.session_state.total_tokens = {"input": 0, "output": 0}
+    if "context_tokens" not in st.session_state:
+        st.session_state.context_tokens = _load_context_tokens(st.session_state.thread_id)
+    if "ctx_model" not in st.session_state:
+        st.session_state.ctx_model = ""
+    if "is_pkce" not in st.session_state:
+        try:
+            import httpx as _httpx
+
+            _r = _httpx.get(f"{BACKEND_URL}/api/auth-mode", timeout=3)
+            st.session_state.is_pkce = _r.json().get("is_pkce", False) if _r.status_code == 200 else False
+        except Exception:
+            st.session_state.is_pkce = False
     if "briefing_read" not in st.session_state:
         st.session_state.briefing_read = False
     if "weekly_report_read" not in st.session_state:
@@ -402,6 +426,10 @@ def _handle_user_input(user_input: str) -> None:
             elif ev["type"] == "usage":
                 session_tokens["input"] += ev["input_tokens"]
                 session_tokens["output"] += ev["output_tokens"]
+                if "context_tokens" in ev:
+                    st.session_state.context_tokens = ev["context_tokens"]
+                    st.session_state.is_pkce = ev.get("is_pkce", False)
+                    st.session_state.ctx_model = ev.get("model_name", "")
 
         if step_placeholder is not None:
             step_elapsed = int(time.time() - step_start)
@@ -539,6 +567,29 @@ def main() -> None:
         total_out = st.session_state.total_tokens["output"]
         if total_in + total_out > 0:
             st.caption(f"세션 토큰  ↑ {total_in:,} · ↓ {total_out:,}")
+
+        if st.session_state.is_pkce:
+            ctx = st.session_state.context_tokens
+            _CTX_LIMITS = {"gpt-5.2": 32_000, "gpt-5.1": 200_000, "gpt-5.1-codex-mini": 200_000}
+            model = st.session_state.ctx_model
+            limit = next((v for k, v in _CTX_LIMITS.items() if k in model), 128_000)
+            st.caption(f"컨텍스트  {ctx:,} / {limit:,} 토큰")
+            st.progress(min(ctx / limit, 1.0))
+            st.caption("※ 보수적 추정치")
+
+        # ── 이번 달 사용량 ──────────────────────────────────────────
+        with st.expander("이번 달 사용량", expanded=False):
+            try:
+                import httpx as _httpx
+
+                _resp = _httpx.get(f"{BACKEND_URL}/api/costs", timeout=5)
+                if _resp.status_code == 200:
+                    _summary = _resp.json().get("summary", "")
+                    st.text(_summary)
+                else:
+                    st.caption("불러오기 실패")
+            except Exception:
+                st.caption("서버 연결 중...")
 
         st.divider()
 
