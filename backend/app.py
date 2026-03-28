@@ -17,6 +17,7 @@ from pydantic import BaseModel  # noqa: E402
 
 from agent.orchestrator import create_orchestrator, init_checkpointer  # noqa: E402
 from agent.subagents.code import stop_sandbox  # noqa: E402
+from cron.scheduler import load_user_jobs_from_db  # noqa: E402
 from cron.jobs.morning_briefing import run_morning_briefing  # noqa: E402
 from cron.jobs.weekly_report import run_weekly_report  # noqa: E402
 from cron.scheduler import setup_scheduler  # noqa: E402
@@ -41,6 +42,7 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None]:
     await init_checkpointer()
     scheduler = setup_scheduler()
     scheduler.start()
+    load_user_jobs_from_db()
     yield
     scheduler.shutdown()
     stop_sandbox()
@@ -153,11 +155,13 @@ def _extract_hitl_info(messages: list[Any]) -> dict[str, Any]:
 def _execute_hitl_tool(tool_name: str, tool_args: dict[str, Any]) -> Any:
     """HITL 확인 후 해당 툴을 직접 실행한다."""
     from tools.calendar_tools import create_event as _create_event
+    from tools.cron_tools import register_cron_job as _register_cron_job
     from tools.notion_tools import create_notion_page as _create_notion_page
 
     _HITL_TOOL_MAP: dict[str, Any] = {
         "create_event": lambda a: _create_event(**a),
         "create_notion_page": lambda a: _create_notion_page(**a),
+        "register_cron_job": lambda a: _register_cron_job(**a),
     }
     if tool_name in _HITL_TOOL_MAP:
         return _HITL_TOOL_MAP[tool_name](tool_args)

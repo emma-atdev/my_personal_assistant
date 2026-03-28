@@ -7,8 +7,11 @@ from tools.papers import fetch_arxiv_papers, fetch_hf_daily_papers
 from tools.search import search_web
 
 
-async def run_morning_briefing() -> None:
-    """매일 10:00 실행. HF + ArXiv 논문과 AI 뉴스를 수집해 Notion에 저장한다."""
+async def run_morning_briefing() -> str:
+    """매일 10:00 실행. HF + ArXiv 논문과 AI 뉴스를 수집해 Notion에 저장한다.
+
+    새 정보가 없거나 이미 실행됐으면 "[SILENT]"를 반환한다.
+    """
     today = date.today().strftime("%Y-%m-%d")
     print(f"[브리핑] {today} 시작...")
 
@@ -39,11 +42,14 @@ async def run_morning_briefing() -> None:
             existing = search_notion(title)
             if title in existing:
                 print(f"[브리핑] {today} 이미 존재, 스킵")
-                return
+                return "[SILENT]"
 
             result = create_notion_page(title=title, content=content, parent_page_id=parent_page_id)
             print(f"[브리핑] {today} 완료 — {result}")
+            return content
         except Exception as e:
             print(f"[브리핑] Notion 생성 실패: {e}")
+            return "[SILENT]"
     else:
         print("[브리핑] NOTION_BRIEFING_PARENT_PAGE_ID 미설정, 저장 건너뜀")
+        return "[SILENT]"

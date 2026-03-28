@@ -55,6 +55,19 @@ def _init_tables_pg(conn: Any) -> None:
         cur.execute("""
             ALTER TABLE conversations ADD COLUMN IF NOT EXISTS metadata TEXT NOT NULL DEFAULT '{}'
         """)
+        cur.execute("""
+            CREATE TABLE IF NOT EXISTS cron_jobs (
+                job_id             TEXT PRIMARY KEY,
+                task               TEXT NOT NULL,
+                schedule_kind      TEXT NOT NULL,
+                schedule_expr      TEXT NOT NULL,
+                tz                 TEXT NOT NULL DEFAULT 'Asia/Seoul',
+                enabled            BOOLEAN NOT NULL DEFAULT TRUE,
+                consecutive_errors INTEGER NOT NULL DEFAULT 0,
+                timeout_seconds    INTEGER NOT NULL DEFAULT 300,
+                created_at         TIMESTAMP DEFAULT NOW()
+            )
+        """)
     conn.commit()
 
 
@@ -87,6 +100,19 @@ def _init_tables_sqlite(conn: sqlite3.Connection) -> None:
             input_tokens  INTEGER NOT NULL,
             output_tokens INTEGER NOT NULL,
             cost_usd      REAL NOT NULL
+        )
+    """)
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS cron_jobs (
+            job_id             TEXT PRIMARY KEY,
+            task               TEXT NOT NULL,
+            schedule_kind      TEXT NOT NULL,
+            schedule_expr      TEXT NOT NULL,
+            tz                 TEXT NOT NULL DEFAULT 'Asia/Seoul',
+            enabled            INTEGER NOT NULL DEFAULT 1,
+            consecutive_errors INTEGER NOT NULL DEFAULT 0,
+            timeout_seconds    INTEGER NOT NULL DEFAULT 300,
+            created_at         TEXT DEFAULT (datetime('now', 'localtime'))
         )
     """)
     conn.commit()

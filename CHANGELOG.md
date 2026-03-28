@@ -1,5 +1,9 @@
 # Changelog
 
+## 2026-03-28
+- 사용자 요청으로 2분 뒤 단발 크론잡(테스트 실행 후 완료 메시지) 등록
+- CHANGELOG.md 내용을 Notion에 동기화(sync_changelog_to_notion) 수행
+
 ## 2026-03-24
 - 이번 달(2026-03) API 비용 요약 조회 및 사용자에게 안내
 - Notion에 'HITL 테스트' 페이지 생성

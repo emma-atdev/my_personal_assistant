@@ -16,13 +16,14 @@ from agent.subagents.research import RESEARCH_SUBAGENT
 from tools.calendar_tools import create_event, get_today_schedule, list_events
 from tools.changelog import append_changelog, read_changelog
 from tools.cost_tracker import get_cost_summary
+from tools.cron_tools import delete_cron_job, list_cron_jobs, register_cron_job
 from tools.memory import delete_memory, get_memory, list_memories, save_memory
 from tools.notion_tools import create_notion_page
 from utils.logger import AgentLoggingHandler
 from utils.mcp_config import allowed_dirs_str as _allowed_dirs_str
 
 _SYSTEM_PROMPT_TEMPLATE = """
-오늘 날짜: {today}
+현재 날짜/시각: {now} (KST)
 
 LLM 전문 AI 개발자의 개인 비서입니다.
 
@@ -68,6 +69,17 @@ LLM 전문 AI 개발자의 개인 비서입니다.
 - 둘 다 사용했다면 `[대화 기억 · 장기 기억]` 함께 표시
 - 기억을 전혀 참고하지 않은 일반 답변에는 표시하지 않음
 
+크론잡 관리:
+- 사용자가 "매일 OO시에 ~해줘", "매주 ~마다 ~해줘", "OO일에 한 번만 ~해줘" 같이 정기/예약 실행을 요청하면
+  register_cron_job 툴 호출 (HITL 적용 — 사용자 확인 후 실행)
+- schedule_kind 변환 규칙:
+  · "매일/매주/매시간" 등 반복 → "cron", cron 표현식으로 변환 (예: 매일 오전 9시 → "0 9 * * *")
+  · "1시간마다", "30분마다" 등 인터벌 → "every", 밀리초 문자열 (예: 1시간 → "3600000")
+  · "OO일 OO시에 한 번" 등 단발 → "at", ISO 8601 (예: "2026-04-01T09:00:00")
+- 등록된 크론잡 조회: list_cron_jobs
+- 크론잡 삭제: delete_cron_job (HITL 불필요 — 자동 실행)
+- 크론잡이 실행되어 보고할 내용이 없으면 반드시 [SILENT] 한 단어만 응답
+
 Changelog 기록 규칙 (필수 — 절대 빠뜨리지 말 것):
 - 아래 작업을 완료한 즉시 반드시 append_changelog를 호출한다:
   · 코드 작성 또는 실행
@@ -75,6 +87,7 @@ Changelog 기록 규칙 (필수 — 절대 빠뜨리지 말 것):
   · 논문 브리핑, 주간 리포트 등 장문 결과물 생성
   · 메모/캘린더/GitHub 이슈·PR 생성
   · Notion 페이지 생성 또는 수정
+  · 크론잡 등록 또는 삭제
 - 사용자가 "changelog 보여줘" 하면 read_changelog 호출
 - append_changelog 호출을 빠뜨리는 것은 오류다
 
@@ -100,6 +113,7 @@ HITL_TOOLS: dict[str, bool] = {
     "write_file": True,
     "create_event": True,
     "create_notion_page": True,
+    "register_cron_job": True,
 }
 
 
@@ -165,11 +179,13 @@ def create_orchestrator(
     else:
         assistant_name = "아직 이름이 없습니다. 첫 대화에서 사용자에게 이름을 지어달라고 요청하세요."
 
-    from datetime import date
+    from datetime import datetime
+    from zoneinfo import ZoneInfo
 
+    now_kst = datetime.now(ZoneInfo("Asia/Seoul")).strftime("%Y년 %m월 %d일 %H:%M")
     system_prompt = _SYSTEM_PROMPT_TEMPLATE.format(
         assistant_name=assistant_name,
-        today=date.today().strftime("%Y년 %m월 %d일"),
+        now=now_kst,
         mcp_allowed_dirs=_allowed_dirs_str(),
     )
     checkpointer = _get_checkpointer()
@@ -190,6 +206,10 @@ def create_orchestrator(
             get_cost_summary,
             # Notion 페이지 생성 (HITL)
             create_notion_page,
+            # 크론잡 관리
+            register_cron_job,
+            list_cron_jobs,
+            delete_cron_job,
             # 변경 이력
             append_changelog,
             read_changelog,
