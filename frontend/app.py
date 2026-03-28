@@ -2,6 +2,8 @@
 
 import json
 import os
+import queue
+import threading
 import time
 from collections.abc import Generator
 from datetime import date, datetime
@@ -14,6 +16,61 @@ from dotenv import load_dotenv
 load_dotenv()
 
 BACKEND_URL = os.getenv("BACKEND_URL", "http://localhost:8000")
+_WS_URL = BACKEND_URL.replace("http://", "ws://").replace("https://", "wss://")
+
+# ── WebSocket 백그라운드 리스너 ───────────────────────────────
+
+_cron_queue: queue.Queue[dict[str, Any]] = queue.Queue()
+_ws_started = False
+_ws_lock = threading.Lock()
+
+
+def _ensure_ws_listener() -> None:
+    """WebSocket 백그라운드 리스너를 최초 1회만 시작한다."""
+    global _ws_started
+    with _ws_lock:
+        if _ws_started:
+            return
+        _ws_started = True
+
+    def _run() -> None:
+        import asyncio
+
+        import websockets
+
+        async def _listen() -> None:
+            while True:
+                try:
+                    async with websockets.connect(f"{_WS_URL}/ws") as ws:
+                        async for raw in ws:
+                            try:
+                                data = json.loads(raw)
+                                if data.get("type") == "cron":
+                                    _cron_queue.put(data)
+                            except Exception:  # noqa: BLE001
+                                pass
+                except Exception:  # noqa: BLE001
+                    await asyncio.sleep(5)
+
+        asyncio.run(_listen())
+
+    threading.Thread(target=_run, daemon=True).start()
+
+
+@st.fragment(run_every="3s")
+def _cron_notification_poller() -> None:
+    """3초마다 크론잡 결과 큐를 확인하고 새 메시지가 있으면 채팅창에 추가한다."""
+    try:
+        data = _cron_queue.get_nowait()
+        st.session_state.messages.append({
+            "role": "assistant",
+            "content": f"🔔 **크론잡 알림**\n\n{data.get('message', '')}",
+            "elapsed": 0,
+            "steps": [],
+        })
+        st.rerun(scope="app")
+    except queue.Empty:
+        pass
 
 st.set_page_config(page_title="개인 비서", page_icon="🤖", layout="wide")
 
@@ -259,6 +316,13 @@ def _handle_hitl() -> None:
 def _handle_user_input(user_input: str) -> None:
     """사용자 입력을 처리하고 응답을 스트리밍한다."""
     st.session_state.messages.append({"role": "user", "content": user_input})
+
+    # 첫 메시지 시점에 제목 업데이트 — HITL 등으로 응답이 없어도 리스트에 표시되도록
+    if len(st.session_state.messages) == 1:
+        from tools.conversations import update_conversation_title
+        title = user_input[:30] + ("..." if len(user_input) > 30 else "")
+        update_conversation_title(st.session_state.thread_id, title)
+
     with st.chat_message("user"):
         st.markdown(user_input)
 
@@ -361,12 +425,6 @@ def _handle_user_input(user_input: str) -> None:
         msg_index = len(st.session_state.messages) - 1
         save_message_metadata(st.session_state.thread_id, msg_index, elapsed, steps)
 
-    if len(st.session_state.messages) == 2:
-        from tools.conversations import update_conversation_title
-
-        title = user_input[:30] + ("..." if len(user_input) > 30 else "")
-        update_conversation_title(st.session_state.thread_id, title)
-
     from tools.conversations import touch_conversation
 
     touch_conversation(st.session_state.thread_id)
@@ -398,6 +456,8 @@ def _export_chat() -> str:
 
 
 def main() -> None:
+    _ensure_ws_listener()
+    _cron_notification_poller()
     _init_session()
 
     st.markdown(
