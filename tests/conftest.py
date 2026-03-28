@@ -1,10 +1,6 @@
 """테스트 공통 픽스처 — 임시 SQLite DB를 사용해 실제 DB를 건드리지 않는다."""
 
 import os
-
-from dotenv import load_dotenv
-
-load_dotenv()
 import sqlite3
 from collections.abc import Generator
 from contextlib import contextmanager
@@ -12,6 +8,9 @@ from pathlib import Path
 from typing import Any
 
 import pytest
+from dotenv import load_dotenv
+
+load_dotenv()
 
 # 에이전트 모듈 임포트 시 OpenAI 클라이언트가 초기화되므로 더미 키 설정
 os.environ.setdefault("OPENAI_API_KEY", "sk-test-dummy")
