@@ -1,6 +1,7 @@
 """메인 Orchestrator 에이전트 설정."""
 
 import os
+from typing import Any
 
 from deepagents import create_deep_agent
 from langchain_core.runnables import RunnableConfig
@@ -120,6 +121,13 @@ HITL_TOOLS: dict[str, bool] = {
 _checkpointer: MemorySaver | None = None
 
 
+def _get_model() -> Any:
+    """PKCE 토큰이 있으면 ChatGPTPKCEModel(gpt-5.2), 없으면 openai:gpt-5.2를 반환한다."""
+    from auth.langchain_chatgpt import get_model
+
+    return get_model(pkce_model="gpt-5.2", openai_fallback="openai:gpt-5.2")
+
+
 async def init_checkpointer() -> None:
     """FastAPI lifespan에서 호출 — DATABASE_URL이 있으면 AsyncPostgresSaver, 없으면 MemorySaver."""
     global _checkpointer
@@ -191,7 +199,7 @@ def create_orchestrator(
     checkpointer = _get_checkpointer()
 
     agent: CompiledStateGraph = create_deep_agent(  # type: ignore[type-arg]
-        model="openai:gpt-5.2",
+        model=_get_model(),
         tools=[
             # 메모리
             save_memory,

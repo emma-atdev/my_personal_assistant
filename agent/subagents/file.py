@@ -1,7 +1,6 @@
 """파일 서브에이전트 — 로컬 MCP 서버를 통한 파일 접근 전담."""
 
-from langchain.chat_models import init_chat_model
-
+from auth.langchain_chatgpt import get_model
 from tools.local_file import list_local_files, read_local_file
 from utils.mcp_config import allowed_dirs_str as _allowed_dirs_str
 
@@ -25,5 +24,5 @@ FILE_SUBAGENT: dict[str, object] = {
         "코드 파일은 구조와 핵심 로직을 요약하고, 문서 파일은 핵심 내용을 추출해 정리하세요."
     ),
     "tools": [read_local_file, list_local_files],
-    "model": init_chat_model("openai:gpt-4o-mini"),
+    "model": get_model(pkce_model="gpt-5.1-codex-mini", openai_fallback="openai:gpt-4o-mini"),
 }

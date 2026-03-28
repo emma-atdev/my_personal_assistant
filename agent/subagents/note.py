@@ -1,7 +1,6 @@
 """노트 서브에이전트 — Notion 페이지 관리 전담."""
 
-from langchain.chat_models import init_chat_model
-
+from auth.langchain_chatgpt import get_model
 from tools.notion_tools import (
     append_notion_block,
     get_notion_page,
@@ -28,5 +27,5 @@ NOTE_SUBAGENT: dict[str, object] = {
         append_notion_block,
         sync_changelog_to_notion,
     ],
-    "model": init_chat_model("openai:gpt-4o-mini"),
+    "model": get_model(pkce_model="gpt-5.1-codex-mini", openai_fallback="openai:gpt-4o-mini"),
 }

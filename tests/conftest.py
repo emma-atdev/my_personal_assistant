@@ -1,6 +1,10 @@
 """테스트 공통 픽스처 — 임시 SQLite DB를 사용해 실제 DB를 건드리지 않는다."""
 
 import os
+
+from dotenv import load_dotenv
+
+load_dotenv()
 import sqlite3
 from collections.abc import Generator
 from contextlib import contextmanager

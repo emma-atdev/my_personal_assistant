@@ -46,6 +46,7 @@ dependencies = [
     "langchain-modal>=0.0.2",
     "langgraph-checkpoint-postgres>=3.0.5",
     "psycopg[binary,pool]>=3.3.3",
+    "curl-cffi>=0.14.0",
 ]
 
 [project.optional-dependencies]
@@ -72,6 +73,7 @@ exclude = ["frontend/app.py"]
 
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
+markers = ["integration: 실제 외부 API를 호출하는 테스트 (CHATGPT_SESSION_TOKEN 필요)"]
 
 [dependency-groups]
 dev = [

@@ -1,6 +1,12 @@
 # 환경 변수
 .env
-.env.prod
+.env.*
+
+# ChatGPT PKCE OAuth 토큰 (절대 커밋 금지)
+.chatgpt_tokens.json
+
+# 내부 구현 문서 (비공개)
+docs/chatgpt_oauth.md
 
 # 가상환경
 .venv

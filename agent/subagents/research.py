@@ -2,8 +2,7 @@
 
 from datetime import date
 
-from langchain.chat_models import init_chat_model
-
+from auth.langchain_chatgpt import get_model
 from tools.papers import fetch_arxiv_papers, fetch_hf_daily_papers
 from tools.search import search_web
 
@@ -24,5 +23,5 @@ RESEARCH_SUBAGENT: dict[str, object] = {
         " 결과를 바로 반환하세요."
     ),
     "tools": [search_web, fetch_hf_daily_papers, fetch_arxiv_papers],
-    "model": init_chat_model("openai:gpt-4o-mini"),
+    "model": get_model(pkce_model="gpt-5.1-codex-mini", openai_fallback="openai:gpt-4o-mini"),
 }
