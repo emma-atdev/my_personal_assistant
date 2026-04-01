@@ -143,6 +143,8 @@ async def init_checkpointer() -> None:
             max_size=10,
             kwargs={"autocommit": True, "prepare_threshold": 0},
             open=False,
+            reconnect_timeout=5,
+            max_idle=30,
         )
         await pool.open()
         cp = AsyncPostgresSaver(pool)  # type: ignore[arg-type]

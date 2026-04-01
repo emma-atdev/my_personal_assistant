@@ -1,5 +1,8 @@
 # Changelog
 
+## 2026-04-01
+- API 비용 요약 조회 (2026-04)
+
 ## 2026-03-28
 - API  e44a69(get_cost_summary) e0c  e44a69  
 - API 비용/토큰 사용량(get_cost_summary) 조회 결과 전달

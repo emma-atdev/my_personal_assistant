@@ -209,24 +209,51 @@ async def chat_stream(body: ChatRequest) -> StreamingResponse:
 
     async def event_generator() -> AsyncGenerator[str]:
         try:
-            async for event in agent.astream_events(
-                {"messages": [HumanMessage(content=body.message)]},
-                config,
-                version="v2",
-            ):
-                chunk = _process_event(event)
-                if chunk:
-                    if "context_tokens" in chunk:
-                        from tools.conversations import update_context_tokens
+            from agent.router import route
 
-                        update_context_tokens(body.thread_id, chunk["context_tokens"])
-                    yield f"data: {json.dumps(chunk, ensure_ascii=False)}\n\n"
+            try:
+                state = await agent.aget_state(config)
+                history = state.values.get("messages", [])
+            except Exception:
+                history = []
+            route_result = await route(body.message, history)
 
-            state = await agent.aget_state(config)
-            if state.next:
-                messages = state.values.get("messages", [])
-                hitl_event = _extract_hitl_info(messages)
-                yield f"data: {json.dumps(hitl_event, ensure_ascii=False)}\n\n"
+            if route_result["type"] == "simple":
+                # 경량 모델 즉답 — 오케스트레이터 없이 바로 스트리밍
+                response: str = route_result.get("response", "")
+                yield f"data: {json.dumps({'type': 'token', 'text': response}, ensure_ascii=False)}\n\n"
+                # 대화 히스토리 유지를 위해 LangGraph state에 저장
+                try:
+                    await agent.aupdate_state(
+                        config,
+                        {"messages": [HumanMessage(content=body.message), AIMessage(content=response)]},
+                        as_node="model",
+                    )
+                except Exception as update_err:
+                    from utils.logger import agent_logger
+
+                    agent_logger.warning("simple 응답 state 저장 실패 (히스토리 미반영): %s", update_err)
+            else:
+                # complex — 재작성된 쿼리로 오케스트레이터 호출
+                rewritten = route_result.get("rewritten") or body.message
+                async for event in agent.astream_events(
+                    {"messages": [HumanMessage(content=rewritten)]},
+                    config,
+                    version="v2",
+                ):
+                    chunk = _process_event(event)
+                    if chunk:
+                        if "context_tokens" in chunk:
+                            from tools.conversations import update_context_tokens
+
+                            update_context_tokens(body.thread_id, chunk["context_tokens"])
+                        yield f"data: {json.dumps(chunk, ensure_ascii=False)}\n\n"
+
+                state = await agent.aget_state(config)
+                if state.next:
+                    messages = state.values.get("messages", [])
+                    hitl_event = _extract_hitl_info(messages)
+                    yield f"data: {json.dumps(hitl_event, ensure_ascii=False)}\n\n"
         except Exception as e:
             yield f"data: {json.dumps({'type': 'error', 'message': str(e)}, ensure_ascii=False)}\n\n"
         finally:
