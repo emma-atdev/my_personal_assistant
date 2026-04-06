@@ -11,9 +11,10 @@ PRICING: dict[str, dict[str, float]] = {
     "gpt-4o": {"input": 2.50 / 1_000_000, "output": 10.0 / 1_000_000},
 }
 
-# ChatGPT Plus PKCE OAuth로 사용하는 모델 (정액제 — 토큰당 과금 없음)
+# ChatGPT Plus / Claude.ai 구독으로 사용하는 모델 (정액제 — 토큰당 과금 없음)
 _PKCE_MODELS: frozenset[str] = frozenset(
     [
+        # ChatGPT Plus
         "gpt-5.1",
         "gpt-5.1-codex-mini",
         "gpt-5.1-codex-max",
@@ -21,6 +22,13 @@ _PKCE_MODELS: frozenset[str] = frozenset(
         "gpt-5.2-codex",
         "gpt-5.3-codex",
         "gpt-5.4",
+        # Claude.ai 구독
+        "claude-opus-4-6",
+        "claude-sonnet-4-6",
+        "claude-haiku-4-5",
+        "claude-haiku-4-5-20251001",
+        "claude-opus-4-5",
+        "claude-sonnet-4-5",
     ]
 )
 

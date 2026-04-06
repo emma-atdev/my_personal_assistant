@@ -370,18 +370,21 @@ def _make_sandbox_factory():
 - Modal Sandbox 초기 생성에 시간 소요 (최초 30~60초)
 - 테스트 커버리지: 핵심 툴 위주, 에이전트 통합 테스트 미비
 
-**deepagents 미사용 기능 → 빠른 개선 가능**
+**deepagents 기본 적용 미들웨어 (이미 동작 중)**
 
-| 개선 | 구현 방법 |
-|------|---------|
-| 대화 히스토리 압축 | `middleware=[SummarizationMiddleware()]` 추가 |
-| 토큰 캐싱 (비용 절감) | `middleware=[AnthropicPromptCachingMiddleware()]` 추가 |
-| 시스템 프롬프트 경량화 | `skills=["skills/research/"]` — SKILL.md 파일로 분리 |
-| HITL 취소 시 dangling tool call | `middleware=[PatchToolCallsMiddleware()]` — 미응답 tool call 자동 패치 |
+`create_deep_agent()` 호출 시 아래 미들웨어가 기본 스택에 자동 포함됨 — 별도 설정 불필요:
+
+| 미들웨어 | 역할 |
+|---------|------|
+| `SummarizationMiddleware` | 컨텍스트 초과 시 오래된 대화 자동 요약·압축 |
+| `AnthropicPromptCachingMiddleware` | 반복 호출 시 프롬프트 캐싱으로 비용 절감 |
+| `PatchToolCallsMiddleware` | HITL 취소·중단 시 dangling tool call 자동 패치 |
 
 **추가 개선점**
+- 오래된 대화 자동 정리 — `delete_conversation()`을 `checkpointer.adelete_thread()`로 교체 + APScheduler에 주기적 정리 크론 추가 (N일 이상 미사용 thread 자동 삭제, DB 종류 무관)
 - 동적 크론잡 — `schedule_task` / `cancel_task` 툴 → APScheduler 연동
 - GitHub HITL — `create_issue` / `comment_on_issue` 오케스트레이터로 올리기
+- 시스템 프롬프트 경량화 — `skills=["skills/research/"]` SKILL.md 파일로 분리 (deepagents 지원, 미사용)
 - 에이전트 답변 정형화 — 응답 포맷이 매번 달라 파싱 어려움, `response_format=MySchema`로 강제 가능 (deepagents 지원, 미사용)
 - 툴 결과 검증 — 미들웨어로 오류 감지 추가 (개인 비서 용도라 LLM 자율 판단으로 충분하다고 판단)
 - 멀티채널 동시 연결 — Streamlit 유지하면서 Telegram 추가 (`/webhook/telegram` + `thread_id="tg-{chat_id}"`, 에이전트 코어 재사용)

@@ -26,16 +26,20 @@ uv run pytest tests/ -v
 ## 아키텍처
 
 ```
-Orchestrator (gpt-5.2 / Thinking mode)
-  └── Subagents (gpt-4o-mini): research / note / file / cron
-        └── Tools: @tools/search.py @tools/papers.py @tools/notes.py @tools/memory.py @tools/local_file.py
+사용자 쿼리
+  └── Router (agent/router.py) — gpt-5.1-codex-mini로 simple/complex 분류
+        ├── simple → 즉답 (오케스트레이터 없이 바로 스트리밍)
+        └── complex → 쿼리 재작성 → Orchestrator (gpt-5.2)
+                          └── Subagents (gpt-5.1-codex-mini / gpt-4o-mini 폴백)
+                                └── Tools: search / papers / memory / calendar / notion / github
 
 FastAPI (async + WebSocket) → Streamlit UI
 로컬 MCP 서버 (포트 8002) ← ngrok Tunnel → Fly.io 서버 (https://mpa-jm.fly.dev)
 APScheduler: 매일 10:00 논문 브리핑, 매주 금요일 17:00 주간 리포트
+ChatGPT Plus PKCE OAuth: .chatgpt_tokens.json 존재 시 gpt-5.x 사용, 없으면 OpenAI API 폴백
 ```
 
-상세 설계: @agent/orchestrator.py @backend/app.py
+상세 설계: @agent/orchestrator.py @backend/app.py @agent/router.py
 
 ## 코딩 컨벤션
 
@@ -64,7 +68,15 @@ TAVILY_API_KEY=        # 무료 1,000회/월 (https://tavily.com)
 # DATABASE_URL=  # 로컬 비워두기. Fly.io 배포 시만 postgresql:// 형식으로 설정
 MCP_SERVER_URL=   # ngrok 고정 도메인 (예: https://xxx.ngrok-free.app)
 MCP_AUTH_TOKEN=
+NOTION_API_KEY=
+NOTION_DEFAULT_PARENT_PAGE_ID=   # 기본 Notion 부모 페이지 ID
+NOTION_BRIEFING_PARENT_PAGE_ID=  # 아침 브리핑 저장 위치
+NOTION_REPORT_PARENT_PAGE_ID=    # 주간 리포트 저장 위치
+NOTION_CHANGELOG_PAGE_ID=        # Changelog 동기화 페이지 ID
 ```
+
+ChatGPT Plus PKCE OAuth 토큰은 `.chatgpt_tokens.json`에 저장 (`.gitignore` 등록됨).
+설정 방법: `docs/chatgpt_oauth.md` 참고.
 
 ---
 - 서브에이전트 모델 설정 시 실제 접근 가능한 모델인지 확인 필요. `gpt-5.3-instant`는 접근 불가 확인됨 → 서브에이전트는 `gpt-4o-mini` 사용
@@ -72,5 +84,8 @@ MCP_AUTH_TOKEN=
 - Docker에서 로컬 패키지 인식 안 될 때 → `ENV PYTHONPATH=/app` 으로 해결 (`uv pip install -e .` 단독으로는 불충분)
 - Fly.io 배포: `pyproject.toml`의 `[tool.setuptools.packages.find] exclude`에서 로컬 패키지 이름 제외 금지
 - Fly.io 배포: `uv run uvicorn` 대신 `.venv/bin/uvicorn` 직접 사용 (런타임 재동기화 방지)
+- LangGraph 그래프 노드명: `model`, `tools`, `HumanInTheLoopMiddleware.after_model` 등. `aupdate_state` 호출 시 반드시 `as_node="model"` 명시 (미지정 시 Ambiguous update 에러)
+- NeonDB 서버리스 연결 끊김 방지: `AsyncConnectionPool`에 `reconnect_timeout=5, max_idle=30` 설정 필수
+- 라우터(`agent/router.py`)에서 `aget_state`/`aupdate_state` 실패 시 에러 대신 warning 로그 후 계속 진행 (NeonDB 유휴 타임아웃 대응)
 
 *Claude가 실수하면 이 파일을 업데이트해서 같은 실수를 반복하지 않도록 한다.*

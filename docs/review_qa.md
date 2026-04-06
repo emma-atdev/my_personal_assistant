@@ -104,10 +104,10 @@ LangGraph 위에서 동작하는 추상화 레이어. `create_deep_agent()` 한 
 | 보안 (경로 제한) | allowlist / sandbox | ✅ MCP deny/ignore | |
 | 크론잡 | 동적 등록/삭제 가능 | ✅ APScheduler (하드코딩) | 동적 등록 불가 — 개선점 |
 | Skills (`SKILL.md`) | ✅ `skills` 파라미터 | ❌ system_prompt 하드코딩으로 대체 | |
-| 대화 요약/압축 | ✅ `SummarizationMiddleware` | ❌ | 개선점 |
+| 대화 요약/압축 | ✅ `SummarizationMiddleware` | ✅ `create_deep_agent()` 기본 스택에 자동 포함 | |
 | 멀티채널 | WhatsApp·Telegram·Discord 등 | ❌ Streamlit만 | 개선점 |
 | 구조화된 출력 | ✅ `response_format` | ❌ | |
-| 토큰 캐싱 | ✅ `AnthropicPromptCachingMiddleware` | ❌ | |
+| 토큰 캐싱 | ✅ `AnthropicPromptCachingMiddleware` | ✅ `create_deep_agent()` 기본 스택에 자동 포함 | |
 | 플러그인 마켓 | ClawHub | ❌ | |
 
 **Q. OpenClaw 대비 MPA가 더 나은 점은?**
@@ -119,17 +119,20 @@ HITL(파괴적 작업 전 확인), MCP로 로컬 맥북 파일 접근, Modal San
 
 | 항목 | 현황 | 개선 방향 | 구현 방법 |
 |------|------|----------|---------|
-| 대화 히스토리 압축 | Checkpointer 무제한 누적 → DB 비대화, 컨텍스트 초과 | N턴 초과 시 오래된 대화 요약 압축 | `create_deep_agent(middleware=[SummarizationMiddleware()])` — deepagents 내장 미들웨어 |
-| 토큰 캐싱 | 미사용 | Anthropic 프롬프트 캐싱으로 반복 호출 비용 절감 | `create_deep_agent(middleware=[AnthropicPromptCachingMiddleware()])` — deepagents 내장 미들웨어 |
-| 시스템 프롬프트 경량화 | `_SYSTEM_PROMPT_TEMPLATE` 하드코딩 (~100줄) | 절차 지식을 SKILL.md 파일로 분리 | `create_deep_agent(skills=["skills/research/", "skills/report/"])` |
-| 동적 크론잡 | morning_briefing, weekly_report 하드코딩 | 대화로 스케줄 등록/삭제 | `schedule_task` / `cancel_task` 툴 → APScheduler `add_job()` / `remove_job()` 연동 |
-| GitHub HITL | 서브에이전트 `interrupt_on` 미동작 | create_issue / comment_on_issue 를 오케스트레이터로 올려야 함 | `HITL_TOOLS`에 추가 + github 서브에이전트에서 제거 |
-| 멀티채널 | Streamlit 웹 UI만 | Streamlit 유지하면서 Telegram 동시 연결 — 채널별 독립 대화 | FastAPI `/webhook/telegram` 엔드포인트 추가. `thread_id="tg-{chat_id}"`로 채널별 대화 히스토리 분리. 에이전트 코어 재사용, 신규 코드 최소화 |
-| 에이전트 답변 정형화 | 없음 — 응답 포맷이 매번 다름 | Pydantic 스키마로 구조화된 출력 강제 | `create_deep_agent(response_format=MySchema)` — deepagents 지원하는데 미사용 |
-| 툴 결과 검증 | 없음 — 오류 문자열을 LLM이 읽고 판단 | 툴 함수 내부 또는 미들웨어로 검증 추가 | 개인 비서 용도라 LLM 자율 판단으로 충분하다고 판단 |
-| HITL 취소·중단 시 dangling tool call | HITL 취소나 에이전트 중단 시 tool call이 응답 없이 대화 히스토리에 남아 다음 요청에서 오류 유발 가능 | 자동 패치 | `create_deep_agent(middleware=[PatchToolCallsMiddleware()])` — deepagents 내장 미들웨어 |
-| 에이전트 평가 | 없음 | LLM 응답 품질 추적 | LangSmith 연동 |
-| 프론트 UX | 기본 Streamlit UI | 채팅 디자인, 서브에이전트 진행 상태 시각화 | Streamlit custom components 또는 Next.js 전환 |
+| 항목 | 현황 | 비고 |
+|------|------|------|
+| 대화 히스토리 압축 | ✅ `SummarizationMiddleware` — `create_deep_agent()` 기본 스택에 자동 포함 | 별도 설정 불필요 |
+| 토큰 캐싱 | ✅ `AnthropicPromptCachingMiddleware` — `create_deep_agent()` 기본 스택에 자동 포함 | 별도 설정 불필요 |
+| HITL 취소·중단 시 dangling tool call | ✅ `PatchToolCallsMiddleware` — `create_deep_agent()` 기본 스택에 자동 포함 | 별도 설정 불필요 |
+| 오래된 대화 자동 정리 | ❌ `delete_conversation()`이 PostgreSQL 테이블 직접 삭제 (DB 종속) | `checkpointer.adelete_thread(thread_id)`로 교체 + APScheduler에 주기적 정리 크론 추가 |
+| 시스템 프롬프트 경량화 | ❌ `_SYSTEM_PROMPT_TEMPLATE` 하드코딩 (~100줄) | `create_deep_agent(skills=["skills/research/", "skills/report/"])` |
+| 동적 크론잡 | ❌ morning_briefing, weekly_report 하드코딩 | `schedule_task` / `cancel_task` 툴 → APScheduler `add_job()` / `remove_job()` 연동 |
+| GitHub HITL | ❌ 서브에이전트 `interrupt_on` 미동작 | `HITL_TOOLS`에 추가 + github 서브에이전트에서 제거 |
+| 멀티채널 | ❌ Streamlit 웹 UI만 | FastAPI `/webhook/telegram` 엔드포인트 추가. `thread_id="tg-{chat_id}"`로 채널별 대화 히스토리 분리 |
+| 에이전트 답변 정형화 | ❌ 없음 — 응답 포맷이 매번 다름 | `create_deep_agent(response_format=MySchema)` — deepagents 지원하는데 미사용 |
+| 툴 결과 검증 | ❌ 없음 — 오류 문자열을 LLM이 읽고 판단 | 개인 비서 용도라 LLM 자율 판단으로 충분하다고 판단 |
+| 에이전트 평가 | ❌ 없음 | LangSmith 연동 |
+| 프론트 UX | ❌ 기본 Streamlit UI | Streamlit custom components 또는 Next.js 전환 |
 
 ---
 

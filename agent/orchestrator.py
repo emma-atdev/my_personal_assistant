@@ -122,7 +122,18 @@ _checkpointer: MemorySaver | None = None
 
 
 def _get_model() -> Any:
-    """PKCE 토큰이 있으면 ChatGPTPKCEModel(gpt-5.2), 없으면 openai:gpt-5.2를 반환한다."""
+    """모델 우선순위: Claude OAuth → ChatGPT PKCE → OpenAI API 폴백."""
+    # 1순위: Claude.ai OAuth (.claude_tokens.json)
+    try:
+        from auth.langchain_claude import check_tokens_available
+        from auth.langchain_claude import get_model as get_claude_model
+
+        if check_tokens_available():
+            return get_claude_model(oauth_model="claude-sonnet-4-6")
+    except Exception:  # noqa: BLE001
+        pass
+
+    # 2순위: ChatGPT Plus PKCE (.chatgpt_tokens.json)
     from auth.langchain_chatgpt import get_model
 
     return get_model(pkce_model="gpt-5.2", openai_fallback="openai:gpt-5.2")
