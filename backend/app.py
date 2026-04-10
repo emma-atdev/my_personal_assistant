@@ -1,6 +1,7 @@
 """FastAPI 백엔드 — REST API + WebSocket."""
 
 import json
+import os
 from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
 from typing import Any
@@ -9,9 +10,9 @@ from dotenv import load_dotenv
 
 load_dotenv()  # 에이전트 모듈 임포트 전에 환경변수 로드
 
-from fastapi import BackgroundTasks, FastAPI, WebSocket, WebSocketDisconnect  # noqa: E402
+from fastapi import BackgroundTasks, FastAPI, Request, WebSocket, WebSocketDisconnect  # noqa: E402
 from fastapi.middleware.cors import CORSMiddleware  # noqa: E402
-from fastapi.responses import StreamingResponse  # noqa: E402
+from fastapi.responses import JSONResponse, StreamingResponse  # noqa: E402
 from langchain_core.messages import AIMessage, HumanMessage, ToolMessage  # noqa: E402
 from pydantic import BaseModel  # noqa: E402
 
@@ -48,6 +49,27 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None]:
 
 
 app = FastAPI(title="Personal Assistant API", lifespan=lifespan)
+
+_MPA_API_KEY = os.getenv("MPA_API_KEY", "")
+
+_AUTH_SKIP_PATHS: frozenset[str] = frozenset({"/api/health", "/docs", "/openapi.json"})
+
+
+@app.middleware("http")
+async def api_key_auth(request: Request, call_next):  # type: ignore[no-untyped-def]
+    """API 키 인증 미들웨어. MPA_API_KEY가 비어있으면 인증 비활성화."""
+    if not _MPA_API_KEY:
+        return await call_next(request)
+
+    if request.url.path in _AUTH_SKIP_PATHS:
+        return await call_next(request)
+
+    auth = request.headers.get("authorization", "")
+    if auth == f"Bearer {_MPA_API_KEY}":
+        return await call_next(request)
+
+    return JSONResponse(status_code=401, content={"detail": "Unauthorized"})
+
 
 app.add_middleware(
     CORSMiddleware,
@@ -189,6 +211,11 @@ def _extract_text(messages: list[Any]) -> str:
 @app.websocket("/ws")
 async def websocket_endpoint(websocket: WebSocket) -> None:
     """백그라운드 작업 완료 알림을 실시간으로 전달한다."""
+    if _MPA_API_KEY:
+        token = websocket.query_params.get("token", "")
+        if token != _MPA_API_KEY:
+            await websocket.close(code=4001, reason="Unauthorized")
+            return
     await websocket.accept()
     _connections.append(websocket)
     try:
