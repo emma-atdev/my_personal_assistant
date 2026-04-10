@@ -15,8 +15,16 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
-BACKEND_URL = os.getenv("BACKEND_URL", "http://localhost:8000")
-_MPA_API_KEY = os.getenv("MPA_API_KEY", "")
+def _get_secret(key: str, default: str = "") -> str:
+    """Streamlit Cloud secrets 또는 환경변수에서 값을 읽는다."""
+    try:
+        return str(st.secrets[key])
+    except (KeyError, FileNotFoundError):
+        return os.getenv(key, default)
+
+
+BACKEND_URL = _get_secret("BACKEND_URL", "http://localhost:8000")
+_MPA_API_KEY = _get_secret("MPA_API_KEY")
 _WS_URL = BACKEND_URL.replace("http://", "ws://").replace("https://", "wss://")
 _AUTH_HEADERS: dict[str, str] = {"Authorization": f"Bearer {_MPA_API_KEY}"} if _MPA_API_KEY else {}
 
