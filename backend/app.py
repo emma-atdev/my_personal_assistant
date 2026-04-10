@@ -162,9 +162,12 @@ def _extract_hitl_from_state(state: Any) -> dict[str, Any]:
 
     서브에이전트 레벨 interrupt도 감지 가능.
     """
+    from utils.logger import agent_logger
+
     for task in getattr(state, "tasks", ()):
         for intr in getattr(task, "interrupts", ()):
             value = getattr(intr, "value", None)
+            agent_logger.info("HITL interrupt value: %s (type: %s)", value, type(value).__name__)
             if isinstance(value, dict) and "actions" in value:
                 actions = value["actions"]
                 if actions:
@@ -280,7 +283,7 @@ async def chat_resume(body: ResumeRequest) -> dict[str, str]:
     agent, config = create_orchestrator(thread_id=body.thread_id)
 
     decision = "approve" if body.confirmed else "reject"
-    result = await agent.ainvoke(Command(resume={"decisions": [{"decision": decision}]}), config)
+    result = await agent.ainvoke(Command(resume={"decisions": [{"type": decision}]}), config)
     all_messages = result.get("messages", [])
     response = _extract_text(all_messages)
 
