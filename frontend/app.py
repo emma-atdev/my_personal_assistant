@@ -16,7 +16,9 @@ from dotenv import load_dotenv
 load_dotenv()
 
 BACKEND_URL = os.getenv("BACKEND_URL", "http://localhost:8000")
+_MPA_API_KEY = os.getenv("MPA_API_KEY", "")
 _WS_URL = BACKEND_URL.replace("http://", "ws://").replace("https://", "wss://")
+_AUTH_HEADERS: dict[str, str] = {"Authorization": f"Bearer {_MPA_API_KEY}"} if _MPA_API_KEY else {}
 
 # ── WebSocket 백그라운드 리스너 ───────────────────────────────
 
@@ -41,7 +43,8 @@ def _ensure_ws_listener() -> None:
         async def _listen() -> None:
             while True:
                 try:
-                    async with websockets.connect(f"{_WS_URL}/ws") as ws:
+                    _ws_uri = f"{_WS_URL}/ws?token={_MPA_API_KEY}" if _MPA_API_KEY else f"{_WS_URL}/ws"
+                    async with websockets.connect(_ws_uri) as ws:
                         async for raw in ws:
                             try:
                                 data = json.loads(raw)
@@ -132,7 +135,7 @@ def _tool_label(name: str) -> str:
 def _load_messages_from_api(thread_id: str) -> list[dict[str, Any]]:
     """백엔드 API로 대화 히스토리를 복원한다."""
     try:
-        resp = httpx.get(f"{BACKEND_URL}/api/chat/messages/{thread_id}", timeout=10)
+        resp = httpx.get(f"{BACKEND_URL}/api/chat/messages/{thread_id}", timeout=10, headers=_AUTH_HEADERS)
         resp.raise_for_status()
         data: list[dict[str, Any]] = resp.json().get("messages", [])
         return data
@@ -144,7 +147,7 @@ def _load_context_tokens(thread_id: str) -> int:
     try:
         import httpx as _httpx
 
-        r = _httpx.get(f"{BACKEND_URL}/api/context-tokens/{thread_id}", timeout=3)
+        r = _httpx.get(f"{BACKEND_URL}/api/context-tokens/{thread_id}", timeout=3, headers=_AUTH_HEADERS)
         return r.json().get("context_tokens", 0) if r.status_code == 200 else 0
     except Exception:
         return 0
@@ -187,7 +190,7 @@ def _init_session() -> None:
         try:
             import httpx as _httpx
 
-            _r = _httpx.get(f"{BACKEND_URL}/api/auth-mode", timeout=3)
+            _r = _httpx.get(f"{BACKEND_URL}/api/auth-mode", timeout=3, headers=_AUTH_HEADERS)
             st.session_state.is_pkce = _r.json().get("is_pkce", False) if _r.status_code == 200 else False
         except Exception:
             st.session_state.is_pkce = False
@@ -241,6 +244,7 @@ def _run_events(thread_id: str, user_input: str) -> Generator[dict[str, Any]]:
             "POST",
             f"{BACKEND_URL}/api/chat",
             json={"thread_id": thread_id, "message": user_input},
+            headers=_AUTH_HEADERS,
         ) as response:
             for line in response.iter_lines():
                 if line.startswith("data: "):
@@ -319,6 +323,7 @@ def _handle_hitl() -> None:
                 "tool_call_id": tool_call_id,
             },
             timeout=60,
+            headers=_AUTH_HEADERS,
         )
         resp.raise_for_status()
         response = resp.json().get("response", "완료됐습니다.")
@@ -582,7 +587,7 @@ def main() -> None:
             try:
                 import httpx as _httpx
 
-                _resp = _httpx.get(f"{BACKEND_URL}/api/costs", timeout=5)
+                _resp = _httpx.get(f"{BACKEND_URL}/api/costs", timeout=5, headers=_AUTH_HEADERS)
                 if _resp.status_code == 200:
                     _summary = _resp.json().get("summary", "")
                     st.text(_summary)
