@@ -162,19 +162,16 @@ def _extract_hitl_from_state(state: Any) -> dict[str, Any]:
 
     서브에이전트 레벨 interrupt도 감지 가능.
     """
-    from utils.logger import agent_logger
-
     for task in getattr(state, "tasks", ()):
         for intr in getattr(task, "interrupts", ()):
             value = getattr(intr, "value", None)
-            agent_logger.info("HITL interrupt value: %s (type: %s)", value, type(value).__name__)
-            if isinstance(value, dict) and "actions" in value:
-                actions = value["actions"]
+            if isinstance(value, dict) and "action_requests" in value:
+                actions = value["action_requests"]
                 if actions:
                     action = actions[0]
                     return {
                         "type": "hitl",
-                        "tool_name": action.get("tool_name", "알 수 없는 작업"),
+                        "tool_name": action.get("name", "알 수 없는 작업"),
                         "tool_args": action.get("args", {}),
                         "tool_call_id": "",
                     }

@@ -37,7 +37,7 @@ def _make_mock_orchestrator(
 
     mock_interrupt = MagicMock()
     mock_interrupt.value = {
-        "actions": [{"tool_name": "create_event", "args": {"summary": "테스트"}}],
+        "action_requests": [{"name": "create_event", "args": {"summary": "테스트"}}],
     }
 
     mock_task = MagicMock()
