@@ -13,7 +13,7 @@ load_dotenv()  # 에이전트 모듈 임포트 전에 환경변수 로드
 from fastapi import BackgroundTasks, FastAPI, Request, WebSocket, WebSocketDisconnect  # noqa: E402
 from fastapi.middleware.cors import CORSMiddleware  # noqa: E402
 from fastapi.responses import JSONResponse, StreamingResponse  # noqa: E402
-from langchain_core.messages import AIMessage, HumanMessage, ToolMessage  # noqa: E402
+from langchain_core.messages import AIMessage, HumanMessage  # noqa: E402
 from pydantic import BaseModel  # noqa: E402
 
 from agent.orchestrator import create_orchestrator, init_checkpointer  # noqa: E402
@@ -157,41 +157,25 @@ def _process_event(event: Any) -> dict[str, Any] | None:
     return None
 
 
-def _extract_hitl_info(messages: list[Any]) -> dict[str, Any]:
-    """마지막 AIMessage의 tool_calls에서 HITL 정보를 추출한다."""
-    tool_name = "알 수 없는 작업"
-    tool_args: dict[str, Any] = {}
-    tool_call_id = ""
-    if messages:
-        last_msg = messages[-1]
-        tool_calls = getattr(last_msg, "tool_calls", [])
-        if tool_calls:
-            tc = tool_calls[0]
-            if isinstance(tc, dict):
-                tool_name = tc.get("name", tool_name)
-                tool_args = tc.get("args", {})
-                tool_call_id = tc.get("id", "") or tc.get("call_id", "")
-            else:
-                tool_name = getattr(tc, "name", tool_name)
-                tool_args = getattr(tc, "args", {})
-                tool_call_id = getattr(tc, "id", "")
-    return {"type": "hitl", "tool_name": tool_name, "tool_args": tool_args, "tool_call_id": tool_call_id}
+def _extract_hitl_from_state(state: Any) -> dict[str, Any]:
+    """StateSnapshot의 tasks/interrupts에서 HITL 정보를 추출한다.
 
-
-def _execute_hitl_tool(tool_name: str, tool_args: dict[str, Any]) -> Any:
-    """HITL 확인 후 해당 툴을 직접 실행한다."""
-    from tools.calendar_tools import create_event as _create_event
-    from tools.cron_tools import register_cron_job as _register_cron_job
-    from tools.notion_tools import create_notion_page as _create_notion_page
-
-    _HITL_TOOL_MAP: dict[str, Any] = {
-        "create_event": lambda a: _create_event(**a),
-        "create_notion_page": lambda a: _create_notion_page(**a),
-        "register_cron_job": lambda a: _register_cron_job(**a),
-    }
-    if tool_name in _HITL_TOOL_MAP:
-        return _HITL_TOOL_MAP[tool_name](tool_args)
-    return f"{tool_name} 실행됨"
+    서브에이전트 레벨 interrupt도 감지 가능.
+    """
+    for task in getattr(state, "tasks", ()):
+        for intr in getattr(task, "interrupts", ()):
+            value = getattr(intr, "value", None)
+            if isinstance(value, dict) and "actions" in value:
+                actions = value["actions"]
+                if actions:
+                    action = actions[0]
+                    return {
+                        "type": "hitl",
+                        "tool_name": action.get("tool_name", "알 수 없는 작업"),
+                        "tool_args": action.get("args", {}),
+                        "tool_call_id": "",
+                    }
+    return {"type": "hitl", "tool_name": "알 수 없는 작업", "tool_args": {}, "tool_call_id": ""}
 
 
 def _extract_text(messages: list[Any]) -> str:
@@ -278,8 +262,7 @@ async def chat_stream(body: ChatRequest) -> StreamingResponse:
 
                 state = await agent.aget_state(config)
                 if state.next:
-                    messages = state.values.get("messages", [])
-                    hitl_event = _extract_hitl_info(messages)
+                    hitl_event = _extract_hitl_from_state(state)
                     yield f"data: {json.dumps(hitl_event, ensure_ascii=False)}\n\n"
         except Exception as e:
             yield f"data: {json.dumps({'type': 'error', 'message': str(e)}, ensure_ascii=False)}\n\n"
@@ -292,27 +275,14 @@ async def chat_stream(body: ChatRequest) -> StreamingResponse:
 @app.post("/api/chat/resume")
 async def chat_resume(body: ResumeRequest) -> dict[str, str]:
     """HITL 확인/취소 후 에이전트를 재개한다."""
+    from langgraph.types import Command
+
     agent, config = create_orchestrator(thread_id=body.thread_id)
 
-    _DEEPAGENTS_RESUME_TOOLS = {"edit_file", "write_file"}
-
-    if body.confirmed:
-        if body.tool_name not in _DEEPAGENTS_RESUME_TOOLS:
-            tool_result = _execute_hitl_tool(body.tool_name, body.tool_args)
-            tool_msg = ToolMessage(content=str(tool_result), tool_call_id=body.tool_call_id)
-            await agent.aupdate_state(config, {"messages": [tool_msg]})
-    else:
-        cancel_msg = ToolMessage(content="사용자가 작업을 취소했습니다.", tool_call_id=body.tool_call_id)
-        await agent.aupdate_state(config, {"messages": [cancel_msg]})
-
-    result = await agent.ainvoke(None, config)
+    decision = "approve" if body.confirmed else "reject"
+    result = await agent.ainvoke(Command(resume={"decisions": [{"decision": decision}]}), config)
     all_messages = result.get("messages", [])
     response = _extract_text(all_messages)
-
-    # 캘린더 링크 보완
-    if body.confirmed and body.tool_name == "create_event":
-        tool_result_str = str(_execute_hitl_tool.__doc__ or "")  # 이미 실행됨 — 링크는 응답에 포함
-        _ = tool_result_str  # 링크는 에이전트 응답에서 자동으로 추출됨
 
     return {"response": response or "완료됐습니다."}
 

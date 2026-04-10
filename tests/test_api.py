@@ -35,18 +35,18 @@ def _make_mock_orchestrator(
         for ev in events:
             yield ev
 
+    mock_interrupt = MagicMock()
+    mock_interrupt.value = {
+        "actions": [{"tool_name": "create_event", "args": {"summary": "테스트"}}],
+    }
+
+    mock_task = MagicMock()
+    mock_task.interrupts = (mock_interrupt,) if has_interrupt else ()
+
     mock_state = MagicMock()
     mock_state.next = ["__interrupt__"] if has_interrupt else []
-    mock_state.values = {
-        "messages": [
-            MagicMock(
-                tool_calls=[{"name": "create_event", "args": {"summary": "테스트"}, "id": "call_123"}],
-                content="",
-            )
-        ]
-        if has_interrupt
-        else []
-    }
+    mock_state.tasks = (mock_task,) if has_interrupt else ()
+    mock_state.values = {"messages": []}
 
     mock_agent = MagicMock()
     mock_agent.astream_events = _mock_stream_events
@@ -100,18 +100,16 @@ def test_chat_stream_hitl_event() -> None:
     assert "hitl" in types
     hitl = next(p for p in payloads if p["type"] == "hitl")
     assert hitl["tool_name"] == "create_event"
-    assert hitl["tool_call_id"] == "call_123"
 
 
 # ── /api/chat/resume ─────────────────────────────────────────
 
 
 def test_chat_resume_cancel() -> None:
-    """취소 흐름 — ToolMessage 주입 후 에이전트 재개."""
+    """취소 흐름 — Command(resume=reject)로 에이전트 재개."""
     from langchain_core.messages import AIMessage
 
     mock_agent = MagicMock()
-    mock_agent.aupdate_state = AsyncMock()
     mock_agent.ainvoke = AsyncMock(return_value={"messages": [AIMessage(content="작업이 취소됐습니다.")]})
 
     with patch("backend.app.create_orchestrator", return_value=(mock_agent, MagicMock())):
@@ -128,21 +126,17 @@ def test_chat_resume_cancel() -> None:
 
     assert response.status_code == 200
     assert "response" in response.json()
-    mock_agent.aupdate_state.assert_called_once()
+    mock_agent.ainvoke.assert_called_once()
 
 
-def test_chat_resume_confirm_direct_tool() -> None:
-    """확인 흐름 (직접 실행 툴) — _execute_hitl_tool 호출 후 재개."""
+def test_chat_resume_confirm() -> None:
+    """확인 흐름 — Command(resume=approve)로 에이전트 재개."""
     from langchain_core.messages import AIMessage
 
     mock_agent = MagicMock()
-    mock_agent.aupdate_state = AsyncMock()
     mock_agent.ainvoke = AsyncMock(return_value={"messages": [AIMessage(content="일정이 생성됐습니다.")]})
 
-    with (
-        patch("backend.app.create_orchestrator", return_value=(mock_agent, MagicMock())),
-        patch("backend.app._execute_hitl_tool", return_value="일정 생성 완료") as mock_exec,
-    ):
+    with patch("backend.app.create_orchestrator", return_value=(mock_agent, MagicMock())):
         response = client.post(
             "/api/chat/resume",
             json={
@@ -156,7 +150,7 @@ def test_chat_resume_confirm_direct_tool() -> None:
 
     assert response.status_code == 200
     assert response.json()["response"] == "일정이 생성됐습니다."
-    mock_exec.assert_called_once_with("create_event", {"summary": "팀 미팅"})
+    mock_agent.ainvoke.assert_called_once()
 
 
 # ── /api/chat/messages/{thread_id} ───────────────────────────
