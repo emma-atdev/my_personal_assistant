@@ -84,12 +84,15 @@ def get_cost_summary() -> str:
     if not rows:
         return "이번 달 사용 기록이 없습니다."
 
-    pkce_rows = []
+    chatgpt_rows = []
+    claude_rows = []
     api_rows = []
     for r in rows:
         name = _normalize_model(str(r["model"]))
-        if name in _PKCE_MODELS:
-            pkce_rows.append(r)
+        if name.startswith("claude-"):
+            claude_rows.append(r)
+        elif name in _PKCE_MODELS:
+            chatgpt_rows.append(r)
         else:
             api_rows.append(r)
 
@@ -106,9 +109,18 @@ def get_cost_summary() -> str:
             lines.append(f"- {name}: 입력 {inp / 1_000_000:.2f}M / 출력 {out / 1_000_000:.2f}M → ${cost:.4f}")
         lines.append("")
 
-    if pkce_rows:
+    if chatgpt_rows:
         lines.append("[ChatGPT Plus ($20/월 정액)]")
-        for r in pkce_rows:
+        for r in chatgpt_rows:
+            inp = int(r["inp"])
+            out = int(r["out"])
+            name = _normalize_model(str(r["model"]))
+            lines.append(f"- {name}: 입력 {inp / 1_000_000:.2f}M / 출력 {out / 1_000_000:.2f}M")
+        lines.append("")
+
+    if claude_rows:
+        lines.append("[Claude.ai 구독 (Pro/Max 정액)]")
+        for r in claude_rows:
             inp = int(r["inp"])
             out = int(r["out"])
             name = _normalize_model(str(r["model"]))

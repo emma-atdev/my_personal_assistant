@@ -1,6 +1,6 @@
 """GitHub 서브에이전트 — Issues, PRs, 레포 관리 전담."""
 
-from auth.langchain_chatgpt import get_model
+from agent.subagents import get_subagent_model
 from tools.github_tools import (
     comment_on_issue,
     create_issue,
@@ -40,7 +40,7 @@ GITHUB_SUBAGENT: dict[str, object] = {
         create_issue,
         comment_on_issue,
     ],
-    "model": get_model(pkce_model="gpt-5.1-codex-mini", openai_fallback="openai:gpt-4o-mini"),
+    "model": get_subagent_model(),
     "interrupt_on": {
         "create_issue": True,
         "comment_on_issue": True,

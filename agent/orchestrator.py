@@ -129,7 +129,7 @@ def _get_model() -> Any:
         from auth.langchain_claude import get_model as get_claude_model
 
         if check_tokens_available():
-            return get_claude_model(oauth_model="claude-sonnet-4-6")
+            return get_claude_model(oauth_model="claude-opus-4-6")
     except Exception:  # noqa: BLE001
         pass
 

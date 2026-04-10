@@ -7,7 +7,7 @@ from typing import Any
 from deepagents import create_deep_agent
 from deepagents.middleware.subagents import CompiledSubAgent
 
-from auth.langchain_chatgpt import get_model
+from agent.subagents import get_subagent_model
 
 _CODE_SYSTEM_PROMPT = (
     "당신은 Python 코드 실행 에이전트입니다. 반드시 한국어로 답변하세요.\n"
@@ -104,7 +104,9 @@ def _make_code_subagent() -> tuple[CompiledSubAgent, Any]:
         backend = None
 
     agent = create_deep_agent(
-        model=get_model(pkce_model="gpt-5.1", openai_fallback="openai:gpt-4o"),
+        model=get_subagent_model(
+            claude_model="claude-sonnet-4-6", pkce_model="gpt-5.1", openai_fallback="openai:gpt-4o"
+        ),
         system_prompt=_CODE_SYSTEM_PROMPT,
         backend=backend,
         name="code-executor",

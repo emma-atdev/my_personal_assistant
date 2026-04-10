@@ -1,6 +1,6 @@
 """크론 서브에이전트 — 브리핑과 리포트 생성 전담."""
 
-from auth.langchain_chatgpt import get_model
+from agent.subagents import get_subagent_model
 from tools.cost_tracker import get_cost_summary
 from tools.notion_tools import create_notion_page, search_notion
 
@@ -18,5 +18,5 @@ CRON_SUBAGENT: dict[str, object] = {
         "결과물은 create_notion_page로 Notion에 저장하세요."
     ),
     "tools": [create_notion_page, search_notion, get_cost_summary],
-    "model": get_model(pkce_model="gpt-5.1-codex-mini", openai_fallback="openai:gpt-4o-mini"),
+    "model": get_subagent_model(),
 }
