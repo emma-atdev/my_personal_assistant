@@ -45,24 +45,24 @@
 | DB | PostgreSQL (Neon) - SQLite 로컬 폴백도 가능                                              |
 | 코드 실행 | Modal Sandbox                                                                     |
 | 파일 접근 | fastmcp + ngrok                                                                   |
-| 배포 | Fly.io + Streamlit Cloud + GitHub Actions                                         |
+| 배포 | Oracle Cloud VM + Streamlit Cloud + GitHub Actions                                |
 
 ### 전체 구조
 
 ```mermaid
 graph TD
     User([사용자]) --> Streamlit[Streamlit Cloud\n프론트엔드]
-    Streamlit -->|SSE · REST · WebSocket| FastAPI[FastAPI 백엔드\nFly.io]
+    Streamlit -->|SSE · REST · WebSocket| FastAPI[FastAPI 백엔드\nOracle Cloud VM]
     FastAPI --> Orchestrator
 
     subgraph Agent["deepagents — Orchestrator-Subagent"]
-        Orchestrator["Orchestrator\ngpt-5.2"]
-        Orchestrator -->|description 기반 라우팅| research["research\ngpt-4o-mini"]
-        Orchestrator --> note["note\ngpt-4o-mini"]
-        Orchestrator --> file["file\ngpt-4o-mini"]
-        Orchestrator --> code["code\ngpt-4o"]
-        Orchestrator --> github["github\ngpt-4o-mini"]
-        Orchestrator --> cron["cron\ngpt-4o-mini"]
+        Orchestrator["Orchestrator\nclaude-opus-4-6"]
+        Orchestrator -->|description 기반 라우팅| research["research\nclaude-haiku-4-5"]
+        Orchestrator --> note["note\nclaude-haiku-4-5"]
+        Orchestrator --> file["file\nclaude-haiku-4-5"]
+        Orchestrator --> code["code\nclaude-sonnet-4-6"]
+        Orchestrator --> github["github\nclaude-haiku-4-5"]
+        Orchestrator --> cron["cron\nclaude-haiku-4-5"]
     end
 
     research -->|Tavily / ArXiv / HuggingFace| Web[(웹 / 논문)]
@@ -117,7 +117,7 @@ agent = create_deep_agent(model="openai:gpt-5.2", tools=[...], subagents=[...])
 | 서비스 | 플랫폼 | 비용 | 선택 이유 |
 |--------|--------|------|-----------|
 | 프론트엔드 | Streamlit Cloud | 무료 | Python 서버 무료 배포, GitHub 자동 배포 |
-| 백엔드 | Fly.io | ~$2/월 | 크론잡 24/7, Docker, WebSocket |
+| 백엔드 | Oracle Cloud VM (Always Free) | 무료 | ARM 1 OCPU + 6GB RAM, 24/7, systemd |
 | DB | Neon PostgreSQL | 무료 | 비활성 슬립, dev/prod 기억 공유 |
 | 코드 실행 | Modal | 무료 ($5/월 크레딧) | 격리 샌드박스, 자동 확장 |
 | 파일 접근 | 로컬 + ngrok | 무료 | 클라우드 서버에서 로컬 파일 접근 |
@@ -179,7 +179,7 @@ uv run streamlit run frontend/app.py --server.port 8001
 | `NOTION_CHANGELOG_PAGE_ID` | | CHANGELOG 동기화할 Notion 페이지 ID |
 | `NOTION_BRIEFING_PARENT_PAGE_ID` | | 아침 브리핑 저장할 상위 페이지 ID |
 | `NOTION_REPORT_PARENT_PAGE_ID` | | 주간 리포트 저장할 상위 페이지 ID |
-| `BACKEND_URL` | | 프론트엔드 → 백엔드 연결 URL (dev: `http://localhost:8000`, prod: Fly.io URL) |
+| `BACKEND_URL` | | 프론트엔드 → 백엔드 연결 URL (dev: `http://localhost:8000`, prod: `https://mpa-emma.duckdns.org`) |
 | `ENV` | | `development` \| `production` (기본: development) |
 | `PORT` | | 백엔드 포트 (기본: 8000) |
 
@@ -204,6 +204,6 @@ lint-and-test (PR · push 공통)
   ├── mypy          — 타입 체크
   └── pytest        — 단위 테스트
 
-deploy (main push 시에만, lint-and-test 통과 후)
-  └── flyctl deploy → Fly.io 자동 배포
+VM 배포 (수동)
+  └── ssh emma@<vm-ip> "cd ~/my_personal_assistant && git pull && sudo systemctl restart mpa-backend"
 ```

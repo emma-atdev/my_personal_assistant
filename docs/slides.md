@@ -82,7 +82,7 @@ Streamlit Cloud (프론트엔드)
   │  POST /api/chat/resume   → HITL 확인/취소
   │  GET  /api/chat/messages → 대화 히스토리 복원
   ▼
-FastAPI 백엔드 (Fly.io)
+FastAPI 백엔드 (Oracle Cloud VM)
   │
   ▼
 Orchestrator — gpt-5.2
@@ -282,13 +282,13 @@ HITL_TOOLS = {
 ## Slide 10 — MCP 서버 & 보안
 
 **deepagents 기본값 교체 1 — 파일 접근**
-- 기본 `read_file`은 서버(Fly.io) 파일시스템을 읽음 → 로컬 맥북 파일 접근 불가
+- 기본 `read_file`은 서버(Oracle Cloud VM) 파일시스템을 읽음 → 로컬 맥북 파일 접근 불가
 - 내장 툴 사용 금지 + 로컬 MCP 서버 + ngrok 터널로 교체
 
 ```
 맥북 MCP 서버 (port 8002)
   └→ ngrok 고정 도메인
-       └→ Fly.io file 서브에이전트가 HTTP 요청
+       └→ Oracle Cloud VM file 서브에이전트가 HTTP 요청
 ```
 
 **보안 이중화**
@@ -309,7 +309,7 @@ ignore:  # 목록에서만 숨김 (.venv, .git)
 ## Slide 11 — 코드 실행: Modal Sandbox
 
 **deepagents 기본값 교체 2 — 코드 실행**
-- 기본 `execute`는 Fly.io 서버에서 직접 실행 → 내 맥북 환경 없음, 서버 터뜨릴 위험
+- 기본 `execute`는 Oracle Cloud VM 서버에서 직접 실행 → 내 맥북 환경 없음, 서버 터뜨릴 위험
 - `backend=ModalSandbox`로 교체 → Modal 격리 컨테이너에서 실행
 
 ```python
@@ -339,7 +339,7 @@ def _make_sandbox_factory():
 | 서비스 | 플랫폼 | 비용 | 선택 이유 |
 |--------|--------|------|-----------|
 | 프론트엔드 | Streamlit Cloud | 무료 | Python 서버, GitHub 자동 배포 |
-| 백엔드 | Fly.io | ~$2/월 | 24/7 크론잡, Docker, WebSocket |
+| 백엔드 | Oracle Cloud VM | 무료 (Always Free) | 24/7 크론잡, Docker, WebSocket |
 | DB | Neon PostgreSQL | 무료 | 비활성 슬립, dev/prod 기억 공유 |
 | 코드 실행 | Modal | 무료 ($5/월 크레딧) | 격리 샌드박스, 자동 확장 |
 | 파일 접근 | 로컬 + ngrok | 무료 | 로컬 파일을 외부에 안전하게 노출 |
@@ -358,7 +358,7 @@ def _make_sandbox_factory():
 > 에이전트 코어는 동일 — 채널만 추가하면 텔레그램 연동 가능 (개선점)
 
 **CI/CD**
-- GitHub Actions: mypy + ruff + pytest 통과 시 Fly.io 자동 배포
+- GitHub Actions: mypy + ruff + pytest 통과 시 Oracle Cloud VM 자동 배포
 - Streamlit Cloud: main 브랜치 push 시 자동 재배포
 
 ---
