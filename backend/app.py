@@ -52,7 +52,7 @@ app = FastAPI(title="Personal Assistant API", lifespan=lifespan)
 
 _MPA_API_KEY = os.getenv("MPA_API_KEY", "")
 
-_AUTH_SKIP_PATHS: frozenset[str] = frozenset({"/api/health", "/docs", "/openapi.json"})
+_AUTH_SKIP_PATHS: frozenset[str] = frozenset({"/api/health", "/docs", "/openapi.json", "/ws"})
 
 
 @app.middleware("http")
