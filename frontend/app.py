@@ -15,6 +15,7 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
+
 def _get_secret(key: str, default: str = "") -> str:
     """Streamlit Cloud secrets 또는 환경변수에서 값을 읽는다."""
     try:
