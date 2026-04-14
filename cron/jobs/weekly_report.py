@@ -3,6 +3,7 @@
 import os
 from datetime import date, timedelta
 
+from templates.notion_format import REPORT_TEMPLATE
 from tools.cost_tracker import get_cost_summary
 
 
@@ -15,10 +16,12 @@ async def run_weekly_report() -> None:
 
     cost_summary = get_cost_summary()
 
-    content = f"""## 이번 달 API 비용
-
-{cost_summary}
-"""
+    content = REPORT_TEMPLATE.format(
+        week_label=week_label,
+        date=today.strftime("%Y-%m-%d"),
+        cost_summary=cost_summary,
+        activities="- [ ] 이번 주 활동 데이터 없음",
+    )
     title = f"주간 리포트 {week_label}"
 
     parent_page_id = os.getenv("NOTION_REPORT_PARENT_PAGE_ID")

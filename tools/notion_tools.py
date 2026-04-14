@@ -1,6 +1,7 @@
 """Notion API 툴 — 페이지 조회, 생성, 검색, CHANGELOG 동기화."""
 
 import os
+import re
 from functools import lru_cache
 from typing import Any
 
@@ -208,55 +209,231 @@ def _update_page_title(page_id: str, title: str) -> None:
     )
 
 
-def _append_markdown(page_id: str, markdown: str) -> None:
-    """마크다운 텍스트를 Notion 블록으로 변환해 페이지에 추가한다."""
-    blocks: list[dict[str, object]] = []
+_CALLOUT_ICONS: dict[str, str] = {
+    "NOTE": "ℹ️",
+    "TIP": "💡",
+    "IMPORTANT": "❗",
+    "WARNING": "⚠️",
+    "CAUTION": "🔴",
+}
 
-    for line in markdown.splitlines():
-        if line.startswith("# "):
-            blocks.append(_heading(line[2:], 1))
+_NUMBERED_RE = re.compile(r"^\d+\.\s+")
+
+
+def _markdown_to_blocks(markdown: str) -> list[dict[str, Any]]:
+    """마크다운 텍스트를 Notion 블록 리스트로 변환한다."""
+    blocks: list[dict[str, Any]] = []
+    lines = markdown.splitlines()
+    i = 0
+
+    while i < len(lines):
+        line = lines[i]
+
+        # 코드 블록 (```)
+        if line.startswith("```"):
+            lang = line[3:].strip() or "plain text"
+            code_lines: list[str] = []
+            i += 1
+            while i < len(lines) and not lines[i].startswith("```"):
+                code_lines.append(lines[i])
+                i += 1
+            blocks.append(_code_block("\n".join(code_lines), lang))
+            i += 1  # ``` 닫는 줄 건너뛰기
+            continue
+
+        # callout (> [!TYPE])
+        if line.startswith("> [!") and "]" in line:
+            tag = line.split("]")[0].replace("> [!", "").strip().upper()
+            icon = _CALLOUT_ICONS.get(tag, "ℹ️")
+            callout_lines: list[str] = []
+            i += 1
+            while i < len(lines) and lines[i].startswith("> "):
+                callout_lines.append(lines[i][2:])
+                i += 1
+            blocks.append(_callout("\n".join(callout_lines), icon))
+            continue
+
+        # 인용 (>)
+        if line.startswith("> "):
+            blocks.append(_quote(line[2:]))
+            i += 1
+            continue
+
+        # 헤딩
+        if line.startswith("### "):
+            blocks.append(_heading(line[4:], 3))
         elif line.startswith("## "):
             blocks.append(_heading(line[3:], 2))
-        elif line.startswith("### "):
-            blocks.append(_heading(line[4:], 3))
+        elif line.startswith("# "):
+            blocks.append(_heading(line[2:], 1))
+        # 체크박스
+        elif line.startswith("- [x] ") or line.startswith("- [X] "):
+            blocks.append(_todo(line[6:], checked=True))
+        elif line.startswith("- [ ] "):
+            blocks.append(_todo(line[6:], checked=False))
+        # 불릿 리스트
         elif line.startswith("- "):
             blocks.append(_bullet(line[2:]))
+        # 번호 리스트
+        elif _NUMBERED_RE.match(line):
+            text = _NUMBERED_RE.sub("", line)
+            blocks.append(_numbered(text))
+        # 구분선
         elif line.startswith("---"):
             blocks.append({"object": "block", "type": "divider", "divider": {}})
+        # 일반 텍스트 / 빈 줄
         elif line.strip():
             blocks.append(_paragraph(line))
         else:
             blocks.append(_paragraph(""))
 
-        # Notion API는 한 번에 최대 100개 블록
-        if len(blocks) >= 99:
-            _client().blocks.children.append(block_id=page_id, children=blocks)
-            blocks = []
+        i += 1
 
-    if blocks:
-        _client().blocks.children.append(block_id=page_id, children=blocks)
+    return blocks
 
 
-def _rich_text(text: str) -> list[dict[str, object]]:
-    return [{"type": "text", "text": {"content": text[:2000]}}]
+def _append_markdown(page_id: str, markdown: str) -> None:
+    """마크다운 텍스트를 Notion 블록으로 변환해 페이지에 추가한다."""
+    blocks = _markdown_to_blocks(markdown)
+
+    # Notion API는 한 번에 최대 100개 블록 — 배치로 분할
+    for start in range(0, len(blocks), 99):
+        batch = blocks[start : start + 99]
+        _client().blocks.children.append(block_id=page_id, children=batch)
 
 
-def _heading(text: str, level: int) -> dict[str, object]:
+_INLINE_PATTERN = re.compile(
+    r"(?P<bold>\*\*(?P<bold_text>.+?)\*\*)"
+    r"|(?P<code>`(?P<code_text>[^`]+)`)"
+    r"|(?P<link>\[(?P<link_text>[^\]]+)\]\((?P<link_url>[^)]+)\))"
+    r"|(?P<italic>\*(?P<italic_text>[^*]+)\*)"
+)
+
+
+def _parse_rich_text(text: str) -> list[dict[str, Any]]:
+    """인라인 마크다운을 Notion rich_text 배열로 변환한다.
+
+    지원: **볼드**, *이탤릭*, `코드`, [텍스트](URL)
+    """
+    if not text:
+        return []
+
+    result: list[dict[str, Any]] = []
+    pos = 0
+
+    for m in _INLINE_PATTERN.finditer(text):
+        # 매치 전 plain text
+        if m.start() > pos:
+            plain = text[pos : m.start()]
+            if plain:
+                result.append({"type": "text", "text": {"content": plain[:2000]}})
+
+        if m.group("bold"):
+            result.append(
+                {
+                    "type": "text",
+                    "text": {"content": m.group("bold_text")[:2000]},
+                    "annotations": {"bold": True},
+                }
+            )
+        elif m.group("code"):
+            result.append(
+                {
+                    "type": "text",
+                    "text": {"content": m.group("code_text")[:2000]},
+                    "annotations": {"code": True},
+                }
+            )
+        elif m.group("link"):
+            result.append(
+                {
+                    "type": "text",
+                    "text": {
+                        "content": m.group("link_text")[:2000],
+                        "link": {"url": m.group("link_url")},
+                    },
+                }
+            )
+        elif m.group("italic"):
+            result.append(
+                {
+                    "type": "text",
+                    "text": {"content": m.group("italic_text")[:2000]},
+                    "annotations": {"italic": True},
+                }
+            )
+
+        pos = m.end()
+
+    # 남은 plain text
+    if pos < len(text):
+        result.append({"type": "text", "text": {"content": text[pos:][:2000]}})
+
+    return result if result else [{"type": "text", "text": {"content": text[:2000]}}]
+
+
+def _heading(text: str, level: int) -> dict[str, Any]:
     key = f"heading_{level}"
-    return {"object": "block", "type": key, key: {"rich_text": _rich_text(text)}}
+    return {"object": "block", "type": key, key: {"rich_text": _parse_rich_text(text)}}
 
 
-def _bullet(text: str) -> dict[str, object]:
+def _bullet(text: str) -> dict[str, Any]:
     return {
         "object": "block",
         "type": "bulleted_list_item",
-        "bulleted_list_item": {"rich_text": _rich_text(text)},
+        "bulleted_list_item": {"rich_text": _parse_rich_text(text)},
     }
 
 
-def _paragraph(text: str) -> dict[str, object]:
+def _numbered(text: str) -> dict[str, Any]:
+    return {
+        "object": "block",
+        "type": "numbered_list_item",
+        "numbered_list_item": {"rich_text": _parse_rich_text(text)},
+    }
+
+
+def _todo(text: str, *, checked: bool = False) -> dict[str, Any]:
+    return {
+        "object": "block",
+        "type": "to_do",
+        "to_do": {"rich_text": _parse_rich_text(text), "checked": checked},
+    }
+
+
+def _quote(text: str) -> dict[str, Any]:
+    return {
+        "object": "block",
+        "type": "quote",
+        "quote": {"rich_text": _parse_rich_text(text)},
+    }
+
+
+def _callout(text: str, icon: str = "ℹ️") -> dict[str, Any]:
+    return {
+        "object": "block",
+        "type": "callout",
+        "callout": {
+            "rich_text": _parse_rich_text(text),
+            "icon": {"type": "emoji", "emoji": icon},
+        },
+    }
+
+
+def _code_block(code: str, language: str = "plain text") -> dict[str, Any]:
+    return {
+        "object": "block",
+        "type": "code",
+        "code": {
+            "rich_text": [{"type": "text", "text": {"content": code[:2000]}}],
+            "language": language,
+        },
+    }
+
+
+def _paragraph(text: str) -> dict[str, Any]:
     return {
         "object": "block",
         "type": "paragraph",
-        "paragraph": {"rich_text": _rich_text(text) if text else []},
+        "paragraph": {"rich_text": _parse_rich_text(text) if text else []},
     }

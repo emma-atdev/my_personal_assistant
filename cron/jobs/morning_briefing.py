@@ -3,6 +3,7 @@
 import os
 from datetime import date
 
+from templates.notion_format import BRIEFING_TEMPLATE
 from tools.papers import fetch_arxiv_papers, fetch_hf_daily_papers
 from tools.search import search_web
 
@@ -19,18 +20,12 @@ async def run_morning_briefing() -> str:
     arxiv_papers = fetch_arxiv_papers(query="large language model", max_results=3)
     ai_news = search_web("AI LLM 최신 뉴스", max_results=3)
 
-    content = f"""## Hugging Face 인기 논문
-
-{hf_papers}
-
-## ArXiv 최신 LLM 논문
-
-{arxiv_papers}
-
-## AI 뉴스
-
-{ai_news}
-"""
+    content = BRIEFING_TEMPLATE.format(
+        date=today,
+        hf_papers=hf_papers,
+        arxiv_papers=arxiv_papers,
+        ai_news=ai_news,
+    )
     title = f"아침 브리핑 {today}"
 
     parent_page_id = os.getenv("NOTION_BRIEFING_PARENT_PAGE_ID")
@@ -38,7 +33,6 @@ async def run_morning_briefing() -> str:
         try:
             from tools.notion_tools import create_notion_page, search_notion
 
-            # 오늘 브리핑이 이미 있으면 생성 스킵
             existing = search_notion(title)
             if title in existing:
                 print(f"[브리핑] {today} 이미 존재, 스킵")
